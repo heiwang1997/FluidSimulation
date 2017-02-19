@@ -1,5 +1,5 @@
 #pragma once
-
+#include "stdafx.h"
 #include "TimeStepController.h"
 #include "vec.h"
 
@@ -31,7 +31,7 @@ public:
 
 	void step(real _dt);
 	void stepLevelSet(real _dt);
-	void setLeftBoundaryVelocity(int v);
+	void setLeftBoundaryVelocity(real v);
 	void addSingleExplosion();
 	void dumpPreview(real *field, int No);
 	void dumpSlicePreview(int No, real * field, int z, float scale);
@@ -48,11 +48,11 @@ private:
 	int resX, resY, resZ;
 	int totalCells, slabSize;
 	int totalVX, totalVY, totalVZ;
-	
+
 	// simulation control
 	real totalTime;
 	int totalSteps;
-	real dx, dt, buoyancy;
+	real dx, buoyancy;
 	real threshold;
 	int iterations;
 
@@ -67,14 +67,11 @@ private:
 	real *signedDistanceField, *signedDistanceFieldOld;
 
 	real gravity;
-	
+
 	CELL_TYPE *cellType;
 	LEVEL_SET_INFO *levelSetInfo;
 	Vec3f **closestPoint;
 	int *closestPointIndex;
-
-	int leftBoundaryVelocity = 0;
-	real leftBoundaryPosition = 0;
 
 	Config *config;
 
@@ -98,8 +95,8 @@ private:
 	void applyPrecon(real *Aplusi, real *Aplusj, real *Aplusk, real *precon, real *r, real *pcg_z);
 	void applyA(real *Adiag, real *Aplusi, real *Aplusj, real *Aplusk, real *s, real *t); // tested
 	void solvePressure(real *Adiag, real *Aplusi, real *Aplusj, real *Aplusk, real *precon, real *pressure, real *divergence);
-	
-	
+
+	void resetSolidVelocity(real *vx, real *vy, real *vz);
 	void updateCellType(real *sdf);
 
 	// from a distorted signed distance, compute a new signed distance.
@@ -114,11 +111,45 @@ private:
 
 	/* read the vXYZ field */
 	void getAveragedVelocityAt(real x, real y, real z, real &vx, real &vy, real &vz);
-	
-	/* implied input: velocityXYZ, their values are modified*/
+
+	/* implied input: velocityXYZ, their values are modified */
 	void extrapolateVelocity();
 
-	// generate A from a signed distance field
-	void genA(real *signedDistanceField);
-};
 
+	// the (fake)``SIMPLE'' algorithm
+private:
+	// Coding note:
+	// do not use _old field variables as member, allocate temporary arrays when necessary.
+	// velocity*Old will NOT be used in the following functions either.
+	// each array is ALWAYS used as indicated by its name, NEVER buffers.
+	// fields are NOT updated until the end of the step.
+	// memory is allocated and recycled in the scope where variables are defined.
+	// pointers are never copied except in argument passing.
+	real *rho;
+	bool loopBoundary = false;
+	const float V_PA = 5536.0e-10;
+	const float V_PB = 5.9e2;
+	const float V_RTM = 1.72;
+	const float V_INVWE = 1.0;
+
+public:
+	/* set initial guess */
+	void setInitGuess(real *out_vxGuess, real *out_vyGuess, real *out_vzGuess, real *out_rhoGuess);
+	/* update velocity */
+	void computeVelocityStar(real dt, real *vxGuess, real *vyGuess, real *vzGuess, real *rhoGuess,
+		real *out_vxStar, real *out_vyStar, real *out_vzStar);
+	/* solve for rho' */
+	void computeRhoPrime(real dt, real *vxStar, real *vyStar, real *vzStar, real *rhoStar, real *out_rhoPrime);
+	/*  */
+	void computeVelocityPrime(real dt, real *vxStar, real *vyStar, real *vzStar, real *rhoStar, real *rhoPrime,
+		real *out_vxPrime, real *out_vyPrime, real *out_vzPrime);
+	/* return true if algorithm converges ( ||rho'||<tol, ||u'||<tol ) */
+	bool updateGuesses(real dt, real *io_vxGuess, real *io_vyGuess, real *io_vzGuess,
+		real *in_vxPrime, real *in_vyPrime, real *in_vzPrime, real *io_rhoGuess, real *in_rhoPrime);
+	void stepSIMPLE(real dt);
+	void addBubble();
+	void runSIMPLE();
+private:
+	void laplaceRhoOnAlignedGrid(real *rho, real * out_laplacianRho);
+	real funcWd(real rho);
+};

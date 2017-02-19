@@ -22,17 +22,18 @@ StaggeredGrid::StaggeredGrid(Config *_config) {
 	totalSteps = 0;
 	threshold = 1e-4f;
 	iterations = config->iteration();
-	
+
 	dx = config->h();
 
 	totalCells = resX * resY * resZ;
 	slabSize = resX * resY;
-	
+
 	// scalar field stored in the center of each cell
 	concentration = (real*)calloc(totalCells, sizeof(real));
 	concentrationOld = (real*)calloc(totalCells, sizeof(real));
 	heat = (real*)calloc(totalCells, sizeof(real));
 	heatOld = (real*)calloc(totalCells, sizeof(real));
+	rho = (real*)calloc(totalCells, sizeof(real));
 	forceX = (real*)calloc(totalCells, sizeof(real));
 	forceY = (real*)calloc(totalCells, sizeof(real));
 	forceZ = (real*)calloc(totalCells, sizeof(real));
@@ -89,7 +90,7 @@ void StaggeredGrid::addSingleExplosion() {
 
 	for (int z = 0; z < resZ; z++) {
 		for (int y = (int)(heighMin / dx); y <= (int)(heighMax / dx); y++) {
-			for (int x = 0; x < resX; x++) {			
+			for (int x = 0; x < resX; x++) {
 				float xLength = (x + 0.5) * dx - xTotal * 0.5f;
 				float zLength = (z + 0.5) * dx - zTotal * 0.5f;
 				float radius = sqrtf(xLength * xLength + zLength * zLength);
@@ -111,7 +112,8 @@ void StaggeredGrid::dumpPreview(real *field, int No) {
 	div *= 4.; //slightly increase contrast
 	for (int i = 0; i<nitems; i++)
 		buf[i] = 0.0f;
-	float scale = 5.0f;
+	// float scale = 5.0f;
+	float scale = 100.0f;
 	for (int x = 0; x < resX; x++) {
 		for (int y = 0; y < resY; y++) {
 			for (int z = 0; z < resZ; z++) {
@@ -174,7 +176,7 @@ void StaggeredGrid::addWater() {
 		for (int j = 1; j < resY - 1; j++) {
 			for (int k = 1; k < resZ - 1; k++) {
 				int index = getIndex(i, j, k, resX, resY, resZ);
-				signedDistanceField[index] = j-i;
+				signedDistanceField[index] = j - i;
 			}
 		}
 	}
@@ -201,12 +203,11 @@ void StaggeredGrid::run() {
 
 void StaggeredGrid::runWater() {
 	timeStep = new TimeStepController(config->totalFrame(), config->gridFPS(), config->gridDt());
+
 	cout << "Simulation started." << endl;
-	//addSingleExplosion();
 	addWater();
 
 	while (!timeStep->isFinished()) {
-		//step(timeStep->getStepDt());
 		stepLevelSet(timeStep->getStepDt());
 		int fmCnt;
 		if (timeStep->isFrameTime(fmCnt)) {
@@ -231,8 +232,6 @@ void StaggeredGrid::step(real _dt) {
 	// advect everything
 	advectMacCormack(_dt);
 
-	/*_velocityOld->advectFrom(_dt / dx, _velocity, NULL);
-	SWAP_POINTERS(_velocityOld, _velocity);*/
 
 	advectVelocitySemiLagrange(_dt / dx, velocityX, velocityY, velocityZ, velocityXOld, velocityYOld, velocityZOld);
 	real *temp;
@@ -261,7 +260,6 @@ void StaggeredGrid::stepLevelSet(real _dt) {
 	computeSignedDistanceField(signedDistanceField);
 
 	cout << "extrapolate velocity field" << endl;
-	cout << "debug0 " << velocityX[36805] << endl;
 	extrapolateVelocity();
 
 	real *vxInterim = new real[totalVX];
@@ -274,18 +272,8 @@ void StaggeredGrid::stepLevelSet(real _dt) {
 	memcpy(vyInterim, velocityY, totalVY * sizeof(real));
 	memcpy(vzInterim, velocityZ, totalVZ * sizeof(real));
 
-	// cout << "apply gravity" << endl;
 	addGravity();
-	// dumpSlicePreview(76, forceY, 50, 1);
-	cout << "debug1 " << velocityXOld[36805] << endl;
-	cout << "debug1.1 " << velocityX[36805] << endl;
 	applyForce(_dt, vxInterim, vyInterim, vzInterim);
-	cout << "debug2 " << velocityXOld[36805] << endl;
-/*
-	resY++;
-	dumpSlicePreview(77, vyInterim, 50, 10);
-	resY--;
-	exit(0);*/
 	cout << "advect SDF" << endl;
 	// advectSDF in v_old
 	real *temp;
@@ -295,8 +283,8 @@ void StaggeredGrid::stepLevelSet(real _dt) {
 
 	cout << "advect velocity" << endl;
 	// advectVelocitySemiLagrange(_dt / dx, velocityXOld, velocityYOld, velocityZOld, velocityXOld, velocityYOld, velocityZOld);
-	advectVelocitySemiLagrange(_dt / dx, velocityXOld, velocityYOld, velocityZOld, 
-		vxInterim, vyInterim, vzInterim, 
+	advectVelocitySemiLagrange(_dt / dx, velocityXOld, velocityYOld, velocityZOld,
+		vxInterim, vyInterim, vzInterim,
 		velocityX, velocityY, velocityZ);
 
 	cout << "project" << endl;
@@ -310,9 +298,6 @@ void StaggeredGrid::stepLevelSet(real _dt) {
 	delete[] vzInterim;
 }
 
-void StaggeredGrid::setLeftBoundaryVelocity(int v) {
-	leftBoundaryVelocity = v;
-}
 
 void StaggeredGrid::applyForce(real dt, real *vx, real *vy, real *vz) {
 	for (int z = 0; z < resZ; z++) {
@@ -365,7 +350,7 @@ void StaggeredGrid::addBuoyancy(real *field)
 	int index = 0;
 
 	real beta = buoyancy;
-	if (beta == 0.) 
+	if (beta == 0.)
 		return;
 	for (int z = 0; z < resZ; z++)
 		for (int y = 0; y < resY; y++)
@@ -393,7 +378,7 @@ void StaggeredGrid::advectFieldMacCormack(const real dt, real *vx, real *vy, rea
 
 	float* phiHatN = (real*)calloc(totalCells, sizeof(real));
 	float* phiHatN1 = (real*)calloc(totalCells, sizeof(real));
-		
+
 	for (int i = 0; i < totalCells; i++)
 		phiHatN[i] = phiHatN1[i] = fieldOld[i];
 
@@ -413,7 +398,7 @@ void StaggeredGrid::advectFieldMacCormack(const real dt, real *vx, real *vy, rea
 				int index = getIndex(x, y, z, resX, resY, resZ);
 				phiN1[index] = phiHatN1[index] + (phiN[index] - phiHatN[index]) * 0.50f;
 			}
-		
+
 	// clamp any newly created extrema
 	bool clampExtrema = true;
 	advectFieldSemiLagrange(dt, velocityX, velocityY, velocityZ, fieldOld, fieldNew, clampExtrema);
@@ -427,7 +412,7 @@ void StaggeredGrid::advectFieldMacCormack(const real dt, real *vx, real *vy, rea
 
 // tested for advection
 void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, real *vz,
-		real *fieldOld, real *fieldNew, bool clampExtrema = false) {
+	real *fieldOld, real *fieldNew, bool clampExtrema = false) {
 	// scale dt up to grid resolution
 	for (int z = 1; z < resZ - 1; z++) {
 		for (int y = 1; y < resY - 1; y++) {
@@ -436,41 +421,61 @@ void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, r
 
 				int vxLeftIndex = getIndex(x, y, z, resX + 1, resY, resZ);
 				int vxRightIndex = getIndex(x + 1, y, z, resX + 1, resY, resZ);
-				real traceX = x - dt * (vx[vxLeftIndex] + vx[vxRightIndex]) * 0.5f;
+				real xTrace = x - dt * (vx[vxLeftIndex] + vx[vxRightIndex]) * 0.5f;
 
 				int vyBelowIndex = getIndex(x, y, z, resX, resY + 1, resZ);
 				int vyAboveIndex = getIndex(x, y + 1, z, resX, resY + 1, resZ);
-				real traceY = y - dt * (vy[vyBelowIndex] + vy[vyAboveIndex]) * 0.5f;
+				real yTrace = y - dt * (vy[vyBelowIndex] + vy[vyAboveIndex]) * 0.5f;
 
 				int vzFrontIndex = getIndex(x, y, z, resX, resY, resZ + 1);
 				int vzBackIndex = getIndex(x, y, z + 1, resX, resY, resZ + 1);
-				real traceZ = z - dt * (vz[vzFrontIndex] + vz[vzBackIndex]) * 0.5f;
+				real zTrace = z - dt * (vz[vzFrontIndex] + vz[vzBackIndex]) * 0.5f;
 				// backtrace
 
 				// clamp backtrace to grid boundaries
-				if (traceX < 0.5) traceX = 0.5;
-				if (traceX > resX - 1.5) traceX = resX - 1.5;
-				if (traceY < 0.5) traceY = 0.5;
-				if (traceY > resY - 1.5) traceY = resY - 1.5;
-				if (traceZ < 0.5) traceZ = 0.5;
-				if (traceZ > resZ - 1.5) traceZ = resZ - 1.5;
+				if (!loopBoundary) {
+					if (xTrace < 0.5) xTrace = 0.5;
+					if (xTrace > resX - 1.5) xTrace = resX - 1.5;
+					if (yTrace < 0.5) yTrace = 0.5;
+					if (yTrace > resY - 1.5) yTrace = resY - 1.5;
+					if (zTrace < 0.5) zTrace = 0.5;
+					if (zTrace > resZ - 1.5) zTrace = resZ - 1.5;
+				}
 
+#ifndef IFLOOR
 				// locate neighbors to interpolate
-				const int x0 = (int)traceX;
+				const int x0 = (int)xTrace;
 				const int x1 = x0 + 1;
-				const int y0 = (int)traceY;
+				const int y0 = (int)yTrace;
 				const int y1 = y0 + 1;
-				const int z0 = (int)traceZ;
+				const int z0 = (int)zTrace;
 				const int z1 = z0 + 1;
 
 				// get interpolation weights
-				const float s1 = traceX - x0;
+				const float s1 = xTrace - (int)xTrace;
 				const float s0 = 1.0f - s1;
-				const float t1 = traceY - y0;
+				const float t1 = yTrace - (int)yTrace;
 				const float t0 = 1.0f - t1;
-				const float u1 = traceZ - z0;
+				const float u1 = zTrace - (int)zTrace;
 				const float u0 = 1.0f - u1;
+#else
 
+				// locate neighbors to interpolate
+				const int x0 = (ifloor(xTrace) + resX) % resX;
+				const int x1 = (x0 + 1) % resX;
+				const int y0 = (ifloor(yTrace) + resY) % resY;
+				const int y1 = (y0 + 1) % resY;
+				const int z0 = (ifloor(zTrace) + resZ) % resZ;
+				const int z1 = (z0 + 1) % resZ;
+
+				// get interpolation weights
+				const float s1 = xTrace - floor(xTrace);
+				const float s0 = 1.0f - s1;
+				const float t1 = yTrace - floor(yTrace);
+				const float t0 = 1.0f - t1;
+				const float u1 = zTrace - floor(zTrace);
+				const float u0 = 1.0f - u1;
+#endif 
 				const int i000 = getIndex(x0, y0, z0, resX, resY, resZ);
 				const int i010 = getIndex(x0, y1, z0, resX, resY, resZ);
 				const int i100 = getIndex(x1, y0, z0, resX, resY, resZ);
@@ -479,7 +484,7 @@ void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, r
 				const int i011 = getIndex(x0, y1, z1, resX, resY, resZ);
 				const int i101 = getIndex(x1, y0, z1, resX, resY, resZ);
 				const int i111 = getIndex(x1, y1, z1, resX, resY, resZ);
-				
+
 				// interpolate
 				if (!clampExtrema) {
 					fieldNew[index] = u0 * (s0 * (t0 * fieldOld[i000] +
@@ -531,6 +536,7 @@ void StaggeredGrid::clampOutsideRays(const real dt, real *vx, real *vy, real *vz
 				float zTrace = z - vzdt;
 
 				// see if it goes outside the boundaries
+				// todo
 				bool hasObstacle =
 					(zTrace < 1.0f) || (zTrace > resZ - 2.0f) ||
 					(yTrace < 1.0f) || (yTrace > resY - 2.0f) ||
@@ -538,6 +544,7 @@ void StaggeredGrid::clampOutsideRays(const real dt, real *vx, real *vy, real *vz
 					(zBackward < 1.0f) || (zBackward > resZ - 2.0f) ||
 					(yBackward < 1.0f) || (yBackward > resY - 2.0f) ||
 					(xBackward < 1.0f) || (xBackward > resX - 2.0f);
+				// end todo
 				// reuse old advection instead of doing another one...
 				if (hasObstacle) {
 					fieldNew[index] = interimField[index];
@@ -551,241 +558,11 @@ void StaggeredGrid::clampOutsideRays(const real dt, real *vx, real *vy, real *vz
 
 /* advect vx, vy, vz inside itself, new values are stored in vNew */
 void StaggeredGrid::advectVelocitySemiLagrange(const real dt, real * vx, real * vy, real * vz, real * vxNew, real * vyNew, real * vzNew) {
-	// velocity X
-	for (int z = 1; z < resZ - 1; z++) {
-		for (int y = 1; y < resY - 1; y++) {
-			for (int x = 2; x < resX - 1; x++) {
-				int index = getIndex(x, y, z, resX + 1, resY, resZ);
-				float velx = vx[index];
-				float vely = (
-					vy[getIndex(x - 1, y, z,		resX, resY + 1, resZ)] + 
-					vy[getIndex(x - 1, y + 1, z,	resX, resY + 1, resZ)] +
-					vy[getIndex(x, y, z,			resX, resY + 1, resZ)] + 
-					vy[getIndex(x, y + 1, z,		resX, resY + 1, resZ)])*0.25f;
-				float velz = (
-					vz[getIndex(x, y, z,			resX, resY, resZ + 1)] + 
-					vz[getIndex(x - 1, y, z,		resX, resY, resZ + 1)] + 
-					vz[getIndex(x, y, z + 1,		resX, resY, resZ + 1)] + 
-					vz[getIndex(x - 1, y, z + 1,	resX, resY, resZ + 1)])*0.25f;
-				
-				// backtrace
-				float xTrace = x - dt * velx;
-				float yTrace = y - dt * vely;
-				float zTrace = z - dt * velz;
-
-				// clamp backtrace to grid boundaries
-				if (xTrace < 1.0) xTrace = 1.0f;
-				if (xTrace > resX - 1.0) xTrace = resX - 1.0f;
-				if (yTrace < 0.5f) yTrace = 0.5f;
-				if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-				if (zTrace < 0.5f) zTrace = 0.5f;
-				if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
-
-				//// clamp backtrace to grid boundaries
-				//if (xTrace < 0.5f) xTrace = 0.5f;
-				//if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-				//if (yTrace < 0.5f) yTrace = 0.5f;
-				//if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-				//if (zTrace < 0.5f) zTrace = 0.5f;
-				//if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
-
-				// locate neighbors to interpolate
-				const int x0 = (int)xTrace;
-				const int x1 = x0 + 1;
-				const int y0 = (int)yTrace;
-				const int y1 = y0 + 1;
-				const int z0 = (int)zTrace;
-				const int z1 = z0 + 1;
-
-				// get interpolation weights
-				const float s1 = xTrace - x0;
-				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
-				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
-				const float u0 = 1.0f - u1;
-
-				const int i000 = getIndex(x0, y0, z0, resX + 1, resY, resZ);
-				const int i010 = getIndex(x0, y1, z0, resX + 1, resY, resZ);
-				const int i100 = getIndex(x1, y0, z0, resX + 1, resY, resZ);
-				const int i110 = getIndex(x1, y1, z0, resX + 1, resY, resZ);
-				const int i001 = getIndex(x0, y0, z1, resX + 1, resY, resZ);
-				const int i011 = getIndex(x0, y1, z1, resX + 1, resY, resZ);
-				const int i101 = getIndex(x1, y0, z1, resX + 1, resY, resZ);
-				const int i111 = getIndex(x1, y1, z1, resX + 1, resY, resZ);
-
-				// interpolate
-				// int index = (*this.*idx)(x, y, z);
-
-				vxNew[index] = u0 * (s0 * (t0 * vx[i000] +
-					t1 * vx[i010]) +
-					s1 * (t0 * vx[i100] +
-						t1 * vx[i110])) +
-					u1 * (s0 * (t0 * vx[i001] +
-						t1 * vx[i011]) +
-						s1 * (t0 * vx[i101] +
-							t1 * vx[i111]));
-
-			}
-		}
-	}
-	// velocity Y
-	for (int z = 1; z < resZ - 1; z++) {
-		for (int y = 2; y < resY - 1; y++) {
-			for (int x = 1; x < resX - 1; x++) {
-				int index = getIndex(x, y, z, resX, resY + 1, resZ);
-				float velx = (
-					vx[getIndex(x, y - 1, z,		resX + 1, resY, resZ)] + 
-					vx[getIndex(x, y, z,			resX + 1, resY, resZ)] +
-					vx[getIndex(x + 1, y - 1, z,	resX + 1, resY, resZ)] + 
-					vx[getIndex(x + 1, y, z,		resX + 1, resY, resZ)])*0.25f;
-				float vely = vy[index];
-				float velz = (
-					vz[getIndex(x, y, z,			resX, resY, resZ + 1)] + 
-					vz[getIndex(x, y, z + 1,		resX, resY, resZ + 1)] +
-					vz[getIndex(x, y - 1, z,		resX, resY, resZ + 1)] + 
-					vz[getIndex(x, y - 1, z + 1,	resX, resY, resZ + 1)]) * 0.25f;
-				
-				// backtrace
-				float xTrace = x - dt * velx;
-				float yTrace = y - dt * vely;
-				float zTrace = z - dt * velz;
-
-				//// clamp backtrace to grid boundaries
-				//if (xTrace < 0.5f) xTrace = 0.5f;
-				//if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-				//if (yTrace < 0.5f) yTrace = 0.5f;
-				//if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-				//if (zTrace < 0.5f) zTrace = 0.5f;
-				//if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
-				//// clamp backtrace to grid boundaries
-				if (xTrace < 0.5f) xTrace = 0.5f;
-				if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-				if (yTrace < 1.0f) yTrace = 1.0f;
-				if (yTrace > resY - 1.0f) yTrace = resY - 1.0f;
-				if (zTrace < 0.5f) zTrace = 0.5f;
-				if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
-
-				// locate neighbors to interpolate
-				const int x0 = (int)xTrace;
-				const int x1 = x0 + 1;
-				const int y0 = (int)yTrace;
-				const int y1 = y0 + 1;
-				const int z0 = (int)zTrace;
-				const int z1 = z0 + 1;
-
-				// get interpolation weights
-				const float s1 = xTrace - x0;
-				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
-				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
-				const float u0 = 1.0f - u1;
-
-				const int i000 = getIndex(x0, y0, z0, resX, resY + 1, resZ);
-				const int i010 = getIndex(x0, y1, z0, resX, resY + 1, resZ);
-				const int i100 = getIndex(x1, y0, z0, resX, resY + 1, resZ);
-				const int i110 = getIndex(x1, y1, z0, resX, resY + 1, resZ);
-				const int i001 = getIndex(x0, y0, z1, resX, resY + 1, resZ);
-				const int i011 = getIndex(x0, y1, z1, resX, resY + 1, resZ);
-				const int i101 = getIndex(x1, y0, z1, resX, resY + 1, resZ);
-				const int i111 = getIndex(x1, y1, z1, resX, resY + 1, resZ);
-
-				// interpolate
-				// int index = (*this.*idx)(x, y, z);
-
-				vyNew[index] = u0 * (s0 * (t0 * vy[i000] +
-					t1 * vy[i010]) +
-					s1 * (t0 * vy[i100] +
-						t1 * vy[i110])) +
-					u1 * (s0 * (t0 * vy[i001] +
-						t1 * vy[i011]) +
-						s1 * (t0 * vy[i101] +
-							t1 * vy[i111]));
-			}
-		}
-	}
-	// velocity Z
-	for (int z = 2; z < resZ - 1; z++) {
-		for (int y = 1; y < resY - 1; y++) {
-			for (int x = 1; x < resX - 1; x++) {
-				int index = getIndex(x, y, z, resX, resY, resZ + 1);
-				real velx = (
-					vx[getIndex(x, y, z - 1,	resX + 1, resY, resZ)] + 
-					vx[getIndex(x, y, z,		resX + 1, resY, resZ)] +
-					vx[getIndex(x + 1, y, z - 1, resX + 1, resY, resZ)] + 
-					vx[getIndex(x + 1, y, z,	resX + 1, resY, resZ)]) *0.25f;
-				real vely = (
-					vy[getIndex(x, y, z - 1,	resX, resY + 1, resZ)] + 
-					vy[getIndex(x, y + 1, z - 1, resX, resY + 1, resZ)] +
-					vy[getIndex(x, y, z,		resX, resY + 1, resZ)] + 
-					vy[getIndex(x, y + 1, z,	resX, resY + 1, resZ)]) * 0.25f;
-				real velz = vz[index];
-
-				// backtrace
-				float xTrace = x - dt * velx;
-				float yTrace = y - dt * vely;
-				float zTrace = z - dt * velz;
-
-				//// clamp backtrace to grid boundaries
-				/*if (xTrace < 0.5f) xTrace = 0.5f;
-				if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-				if (yTrace < 0.5f) yTrace = 0.5f;
-				if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-				if (zTrace < 0.5f) zTrace = 0.5f;
-				if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
-*/
-				// clamp backtrace to grid boundaries
-				if (xTrace < 0.5f) xTrace = 0.5f;
-				if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-				if (yTrace < 0.5f) yTrace = 0.5f;
-				if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-				if (zTrace < 1.0f) zTrace = 1.0f;
-				if (zTrace > resZ - 1.0) zTrace = resZ - 1.0f;
-
-				// locate neighbors to interpolate
-				const int x0 = (int)xTrace;
-				const int x1 = x0 + 1;
-				const int y0 = (int)yTrace;
-				const int y1 = y0 + 1;
-				const int z0 = (int)zTrace;
-				const int z1 = z0 + 1;
-
-				// get interpolation weights
-				const float s1 = xTrace - x0;
-				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
-				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
-				const float u0 = 1.0f - u1;
-
-				const int i000 = getIndex(x0, y0, z0, resX, resY, resZ + 1);
-				const int i010 = getIndex(x0, y1, z0, resX, resY, resZ + 1);
-				const int i100 = getIndex(x1, y0, z0, resX, resY, resZ + 1);
-				const int i110 = getIndex(x1, y1, z0, resX, resY, resZ + 1);
-				const int i001 = getIndex(x0, y0, z1, resX, resY, resZ + 1);
-				const int i011 = getIndex(x0, y1, z1, resX, resY, resZ + 1);
-				const int i101 = getIndex(x1, y0, z1, resX, resY, resZ + 1);
-				const int i111 = getIndex(x1, y1, z1, resX, resY, resZ + 1);
-
-				// interpolate
-				// int index = (*this.*idx)(x, y, z);
-
-				vzNew[index] = u0 * (s0 * (t0 * vz[i000] +
-					t1 * vz[i010]) +
-					s1 * (t0 * vz[i100] +
-						t1 * vz[i110])) +
-					u1 * (s0 * (t0 * vz[i001] +
-						t1 * vz[i011]) +
-						s1 * (t0 * vz[i101] +
-							t1 * vz[i111]));
-			}
-		}
-	}
+	advectVelocitySemiLagrange(dt, vx, vy, vz, vx, vy, vz, vxNew, vyNew, vzNew);
 }
 
-/* advect vx, vy, vz inside itself, new values are stored in vNew */
-void StaggeredGrid::advectVelocitySemiLagrange(const real dt, 
+/* advect vx, vy, vz inside background value, new values are stored in vNew */
+void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 	real * vxBackground, real * vyBackground, real * vzBackground,
 	real * vxInterim, real *vyInterim, real *vzInterim,
 	real * vxNew, real * vyNew, real * vzNew) {
@@ -812,21 +589,18 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				float zTrace = z - dt * velz;
 
 				// clamp backtrace to grid boundaries
-				if (xTrace < 1.0) xTrace = 1.0f;
-				if (xTrace > resX - 1.0) xTrace = resX - 1.0f;
-				if (yTrace < 0.5f) yTrace = 0.5f;
-				if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-				if (zTrace < 0.5f) zTrace = 0.5f;
-				if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
-
-				//// clamp backtrace to grid boundaries
-				//if (xTrace < 0.5f) xTrace = 0.5f;
-				//if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-				//if (yTrace < 0.5f) yTrace = 0.5f;
-				//if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-				//if (zTrace < 0.5f) zTrace = 0.5f;
-				//if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
-
+				if (!loopBoundary) {
+					if (xTrace < 1.0) xTrace = 1.0f;
+					if (xTrace > resX - 1.0) xTrace = resX - 1.0f;
+					if (yTrace < 0.5f) yTrace = 0.5f;
+					if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
+					if (zTrace < 0.5f) zTrace = 0.5f;
+					if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
+				}
+				else {
+					assert(false);
+				}
+#ifndef IFLOOR
 				// locate neighbors to interpolate
 				const int x0 = (int)xTrace;
 				const int x1 = x0 + 1;
@@ -836,13 +610,30 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				const int z1 = z0 + 1;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
+				const float s1 = xTrace - (int)xTrace;
 				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
+				const float t1 = yTrace - (int)yTrace;
 				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
+				const float u1 = zTrace - (int)zTrace;
 				const float u0 = 1.0f - u1;
 
+#else
+				// locate neighbors to interpolate
+				const int x0 = (ifloor(xTrace) + resX) % resX;
+				const int x1 = (x0 + 1) % resX;
+				const int y0 = (ifloor(yTrace) + resY) % resY;
+				const int y1 = (y0 + 1) % resY;
+				const int z0 = (ifloor(zTrace) + resZ) % resZ;
+				const int z1 = (z0 + 1) % resZ;
+
+				// get interpolation weights
+				const float s1 = xTrace - floor(xTrace);
+				const float s0 = 1.0f - s1;
+				const float t1 = zTrace - floor(yTrace);
+				const float t0 = 1.0f - t1;
+				const float u1 = zTrace - floor(zTrace);
+				const float u0 = 1.0f - u1;
+#endif
 				const int i000 = getIndex(x0, y0, z0, resX + 1, resY, resZ);
 				const int i010 = getIndex(x0, y1, z0, resX + 1, resY, resZ);
 				const int i100 = getIndex(x1, y0, z0, resX + 1, resY, resZ);
@@ -853,7 +644,6 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				const int i111 = getIndex(x1, y1, z1, resX + 1, resY, resZ);
 
 				// interpolate
-				// int index = (*this.*idx)(x, y, z);
 
 				vxNew[index] = u0 * (s0 * (t0 * vxInterim[i000] +
 					t1 * vxInterim[i010]) +
@@ -890,21 +680,16 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				float zTrace = z - dt * velz;
 
 				//// clamp backtrace to grid boundaries
-				//if (xTrace < 0.5f) xTrace = 0.5f;
-				//if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-				//if (yTrace < 0.5f) yTrace = 0.5f;
-				//if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-				//if (zTrace < 0.5f) zTrace = 0.5f;
-				//if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
-				//// clamp backtrace to grid boundaries
-				if (xTrace < 0.5f) xTrace = 0.5f;
-				if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-				if (yTrace < 1.0f) yTrace = 1.0f;
-				if (yTrace > resY - 1.0f) yTrace = resY - 1.0f;
-				if (zTrace < 0.5f) zTrace = 0.5f;
-				if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
+				if (!loopBoundary) {
+					if (xTrace < 0.5f) xTrace = 0.5f;
+					if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
+					if (yTrace < 1.0f) yTrace = 1.0f;
+					if (yTrace > resY - 1.0f) yTrace = resY - 1.0f;
+					if (zTrace < 0.5f) zTrace = 0.5f;
+					if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
+				}
 
-				// locate neighbors to interpolate
+				//// locate neighbors to interpolate
 				const int x0 = (int)xTrace;
 				const int x1 = x0 + 1;
 				const int y0 = (int)yTrace;
@@ -913,12 +698,27 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				const int z1 = z0 + 1;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
+				const float s1 = xTrace - (int)xTrace;
 				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
+				const float t1 = yTrace - (int)yTrace;
 				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
+				const float u1 = zTrace - (int)zTrace;
 				const float u0 = 1.0f - u1;
+
+				//const int x0 = (ifloor(xTrace) + resX) % resX;
+				//const int x1 = (x0 + 1) % resX;
+				//const int y0 = (ifloor(yTrace) + resY) % resY;
+				//const int y1 = (y0 + 1) % resY;
+				//const int z0 = (ifloor(zTrace) + resZ) % resZ;
+				//const int z1 = (z0 + 1) % resZ;
+
+				//// get interpolation weights
+				//const float s1 = xTrace - floor(xTrace);
+				//const float s0 = 1.0f - s1;
+				//const float t1 = zTrace - floor(yTrace);
+				//const float t0 = 1.0f - t1;
+				//const float u1 = zTrace - floor(zTrace);
+				//const float u0 = 1.0f - u1;
 
 				const int i000 = getIndex(x0, y0, z0, resX, resY + 1, resZ);
 				const int i010 = getIndex(x0, y1, z0, resX, resY + 1, resZ);
@@ -930,8 +730,6 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				const int i111 = getIndex(x1, y1, z1, resX, resY + 1, resZ);
 
 				// interpolate
-				// int index = (*this.*idx)(x, y, z);
-
 				vyNew[index] = u0 * (s0 * (t0 * vyInterim[i000] +
 					t1 * vyInterim[i010]) +
 					s1 * (t0 * vyInterim[i100] +
@@ -965,22 +763,15 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				float yTrace = y - dt * vely;
 				float zTrace = z - dt * velz;
 
-				//// clamp backtrace to grid boundaries
-				/*if (xTrace < 0.5f) xTrace = 0.5f;
-				if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-				if (yTrace < 0.5f) yTrace = 0.5f;
-				if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-				if (zTrace < 0.5f) zTrace = 0.5f;
-				if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
-				*/
 				// clamp backtrace to grid boundaries
-				if (xTrace < 0.5f) xTrace = 0.5f;
-				if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-				if (yTrace < 0.5f) yTrace = 0.5f;
-				if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-				if (zTrace < 1.0f) zTrace = 1.0f;
-				if (zTrace > resZ - 1.0) zTrace = resZ - 1.0f;
-
+				if (!loopBoundary) {
+					if (xTrace < 0.5f) xTrace = 0.5f;
+					if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
+					if (yTrace < 0.5f) yTrace = 0.5f;
+					if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
+					if (zTrace < 1.0f) zTrace = 1.0f;
+					if (zTrace > resZ - 1.0) zTrace = resZ - 1.0f;
+				}
 				// locate neighbors to interpolate
 				const int x0 = (int)xTrace;
 				const int x1 = x0 + 1;
@@ -990,12 +781,28 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				const int z1 = z0 + 1;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
+				const float s1 = xTrace - (int)xTrace;
 				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
+				const float t1 = yTrace - (int)yTrace;
 				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
+				const float u1 = zTrace - (int)zTrace;
 				const float u0 = 1.0f - u1;
+
+
+				//const int x0 = (ifloor(xTrace) + resX) % resX;
+				//const int x1 = (x0 + 1) % resX;
+				//const int y0 = (ifloor(yTrace) + resY) % resY;
+				//const int y1 = (y0 + 1) % resY;
+				//const int z0 = (ifloor(zTrace) + resZ) % resZ;
+				//const int z1 = (z0 + 1) % resZ;
+
+				//// get interpolation weights
+				//const float s1 = xTrace - floor(xTrace);
+				//const float s0 = 1.0f - s1;
+				//const float t1 = zTrace - floor(yTrace);
+				//const float t0 = 1.0f - t1;
+				//const float u1 = zTrace - floor(zTrace);
+				//const float u0 = 1.0f - u1;
 
 				const int i000 = getIndex(x0, y0, z0, resX, resY, resZ + 1);
 				const int i010 = getIndex(x0, y1, z0, resX, resY, resZ + 1);
@@ -1024,18 +831,17 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 
 
 void StaggeredGrid::project() {
-	
+
 	unsigned char *cellFlag = new unsigned char[totalCells];
 	real *precon = new float[totalCells];
 	real *pressure = new float[totalCells];
-	
+
 	memset(cellFlag, 0, sizeof(unsigned char)*totalCells);
 	memset(precon, 0, sizeof(float)*totalCells);
 	memset(pressure, 0, sizeof(float)*totalCells);
 
 	setBorderType(cellType, resX, resY, resZ, SOLID);
 
-	// set boundary velocity & cell type (solid);
 	for (int x = 0; x < resX; x++) {
 		for (int y = 0; y < resY; y++) {
 			velocityZ[getIndex(x, y, 0, resX, resY, resZ + 1)] = 0;
@@ -1081,28 +887,25 @@ void StaggeredGrid::project() {
 	real *Aplusi = new real[totalCells]; memset(Aplusi, 0, totalCells * sizeof(real));
 	real *Aplusj = new real[totalCells]; memset(Aplusj, 0, totalCells * sizeof(real));
 	real *Aplusk = new real[totalCells]; memset(Aplusk, 0, totalCells * sizeof(real));
-	cout << Adiag[totalCells-1] << endl;
+	cout << Adiag[totalCells - 1] << endl;
 	genA(Adiag, Aplusi, Aplusj, Aplusk, 1.0f);
-	// test(cellFlag);
 	// Boundaries are set to SOLID. Different from lodsmoke.
-	// end set flags
 	real *preconA = new real[totalCells]; memset(preconA, 0, totalCells);
 	genPrecon(Adiag, Aplusi, Aplusj, Aplusk, precon);
 	//// get pre-conditioner
-
 	real *divergence = new real[totalCells];
 	memset(divergence, 0, sizeof(real)*totalCells);
 	// calculate divergence
 	for (int z = 1; z < resZ - 1; z++) {
 		for (int y = 1; y < resY - 1; y++) {
 			for (int x = 1; x < resX - 1; x++) {
-				int index		= getIndex(x,		y,		z,		resX,		resY,		resZ);
-				int indexRight	= getIndex(x + 1,	y,		z,		resX + 1,	resY,		resZ);
-				int indexLeft	= getIndex(x,		y,		z,		resX + 1,	resY,		resZ);
-				int indexAbove	= getIndex(x,		y + 1,	z,		resX,		resY + 1,	resZ);
-				int indexBelow	= getIndex(x,		y,		z,		resX,		resY + 1,	resZ);
-				int indexFront	= getIndex(x,		y,		z,		resX,		resY,		resZ + 1);
-				int indexBack	= getIndex(x,		y,		z + 1,	resX,		resY,		resZ + 1);
+				int index = getIndex(x, y, z, resX, resY, resZ);
+				int indexRight = getIndex(x + 1, y, z, resX + 1, resY, resZ);
+				int indexLeft = getIndex(x, y, z, resX + 1, resY, resZ);
+				int indexAbove = getIndex(x, y + 1, z, resX, resY + 1, resZ);
+				int indexBelow = getIndex(x, y, z, resX, resY + 1, resZ);
+				int indexFront = getIndex(x, y, z, resX, resY, resZ + 1);
+				int indexBack = getIndex(x, y, z + 1, resX, resY, resZ + 1);
 				if (cellType[index] != FLUID) {
 					divergence[index] = 0.0f;
 				}
@@ -1116,18 +919,6 @@ void StaggeredGrid::project() {
 						- velocityZ[indexFront]
 						);
 				}
-				if (cellType[index - 1] == SOLID)
-					divergence[index] -= velocityX[indexLeft];
-				if (cellType[index + 1] == SOLID)
-					divergence[index] += velocityX[indexRight];
-				if (cellType[index - resX] == SOLID)
-					divergence[index] -= velocityY[indexBelow];
-				if (cellType[index + resX] == SOLID)
-					divergence[index] += velocityY[indexAbove];
-				if (cellType[index - slabSize] == SOLID)
-					divergence[index] -= velocityZ[indexFront];
-				if (cellType[index + slabSize] == SOLID)
-					divergence[index] += velocityZ[indexBack];
 			}
 		}
 	}
@@ -1172,49 +963,6 @@ void StaggeredGrid::project() {
 	}
 
 
-	// calculate divergence
-	double mtt = 0;
-	for (int z = 1; z < resZ - 1; z++) {
-		for (int y = 1; y < resY - 1; y++) {
-			for (int x = 1; x < resX - 1; x++) {
-				int index = getIndex(x, y, z, resX, resY, resZ);
-				int indexRight = getIndex(x + 1, y, z, resX + 1, resY, resZ);
-				int indexLeft = getIndex(x, y, z, resX + 1, resY, resZ);
-				int indexAbove = getIndex(x, y + 1, z, resX, resY + 1, resZ);
-				int indexBelow = getIndex(x, y, z, resX, resY + 1, resZ);
-				int indexFront = getIndex(x, y, z, resX, resY, resZ + 1);
-				int indexBack = getIndex(x, y, z + 1, resX, resY, resZ + 1);
-				if (cellType[index] != FLUID) {
-					divergence[index] = 0.0f;
-				}
-				else {
-					divergence[index] = -(
-						velocityX[indexRight]
-						- velocityX[indexLeft]
-						+ velocityY[indexAbove]
-						- velocityY[indexBelow]
-						+ velocityZ[indexBack]
-						- velocityZ[indexFront]
-						);
-				}
-				if (cellType[index - 1] == SOLID)
-					divergence[index] -= velocityX[indexLeft];
-				if (cellType[index + 1] == SOLID)
-					divergence[index] += velocityX[indexRight];
-				if (cellType[index - resX] == SOLID)
-					divergence[index] -= velocityY[indexBelow];
-				if (cellType[index + resX] == SOLID)
-					divergence[index] += velocityY[indexAbove];
-				if (cellType[index - slabSize] == SOLID)
-					divergence[index] -= velocityZ[indexFront];
-				if (cellType[index + slabSize] == SOLID)
-					divergence[index] += velocityZ[indexBack];
-			}
-		}
-	}
-	std::cout << "mtt1:" << mtt << std::endl;
-	mtt = cblas_dsdot(slabSize*resZ, divergence, 1, divergence, 1);
-	std::cout << "mtt2:" << mtt << std::endl;
 
 	delete[] Adiag;
 	delete[] Aplusi;
@@ -1303,7 +1051,7 @@ void StaggeredGrid::genPrecon(real * Adiag, real * Aplusi, real * Aplusj, real *
 				int jMinus = index - resX;
 				int kMinus = index - slabSize;
 				if (cellType[index] == FLUID) {
-					double e = Adiag[index] 
+					double e = Adiag[index]
 						- sq(Aplusi[iMinus] * precon[iMinus])
 						- sq(Aplusj[jMinus] * precon[jMinus])
 						- sq(Aplusk[kMinus] * precon[kMinus])
@@ -1367,12 +1115,12 @@ void StaggeredGrid::applyA(real * Adiag, real * Aplusi, real * Aplusj, real * Ap
 					continue;
 				}
 				t[index] = Adiag[index] * s[index] +
-					Aplusi[index] * s[index+1] +
-					Aplusj[index] * s[index+resX] +
-					Aplusk[index] * s[index+slabSize] +
-					Aplusi[index-1] * s[index-1] +
-					Aplusj[index-resX] * s[index-resX] +
-					Aplusk[index-slabSize] * s[index-slabSize];
+					Aplusi[index] * s[index + 1] +
+					Aplusj[index] * s[index + resX] +
+					Aplusk[index] * s[index + slabSize] +
+					Aplusi[index - 1] * s[index - 1] +
+					Aplusj[index - resX] * s[index - resX] +
+					Aplusk[index - slabSize] * s[index - slabSize];
 			}
 		}
 	}
@@ -1484,8 +1232,8 @@ real norm(Vec3f &vec) {
 }
 
 void vecCopy(Vec3f *s, Vec3f *t) {
-	t->v[0] = s->v[0]; 
-	t->v[1] = s->v[1]; 
+	t->v[0] = s->v[0];
+	t->v[1] = s->v[1];
 	t->v[2] = s->v[2];
 }
 
@@ -1628,7 +1376,7 @@ void StaggeredGrid::computeSignedDistanceField(real *sdf) {
 					closestPointIndex[neighborIndex] = closestPointIndex[index];
 					vecCopy(closestPoint[index], closestPoint[neighborIndex]);
 					assert(cellType[closestPointIndex[index]] != SOLID);
-					
+
 					priorityQueue.insert(IndexDistanceWrapper(neighborIndex, usdf[neighborIndex]));
 					levelSetInfo[neighborIndex] = IMMEDIATE_NEIGHBOR;
 				}
@@ -1801,7 +1549,7 @@ void StaggeredGrid::getAveragedVelocityAt(real x, real y, real z, real &vx, real
 		real t1 = z - xFront;
 		real t0 = 1 - t1;
 
-		int direction = 0, resVX = resX+1, resVY = resY, resVZ = resZ;
+		int direction = 0, resVX = resX + 1, resVY = resY, resVZ = resZ;
 		int w000 = isValidVelocity(xLeft, xBelow, xFront, direction);
 		int w001 = isValidVelocity(xLeft, xBelow, xBack, direction);
 		int w010 = isValidVelocity(xLeft, xAbove, xFront, direction);
@@ -1986,20 +1734,12 @@ void StaggeredGrid::extrapolateVelocity() {
 			assert(closestPointIndex[closestPointIndex[index]] == -1);
 		}
 		real vx, vy, vz;
-		if (index == 36441) {
-			cout << "debug0.09 " << alignedVelocityX[index] << endl;
-			cout << valueFromX << ", " << valueFromY << ", " << valueFromZ << endl;;
-		}
 		getAveragedVelocityAt(valueFromX, valueFromY, valueFromZ, vx, vy, vz);
 		alignedVelocityX[index] = vx;
-		if (index == 36441) {
-			cout << "debug0.09 " << alignedVelocityX[index] << endl;
-		}
 		alignedVelocityY[index] = vy;
 		alignedVelocityZ[index] = vz;
 		assert(abs(vx) < 10000);
 	}
-	cout << "debug0.1 " << velocityX[36805] << endl;
 	for (int index = 0; index < totalCells; index++) {
 		if (cellType[index] == SOLID || cellType[index] == FLUID) {
 			continue;
@@ -2007,10 +1747,6 @@ void StaggeredGrid::extrapolateVelocity() {
 		if (cellType[index + 1] == AIR) {
 			int i, j, k;
 			getPos(index, resX, resY, resZ, i, j, k);
-			if (getIndex(i + 1, j, k, resX + 1, resY, resZ) == 36805) {
-				cout << "debug0.15 " << index << ": " << (alignedVelocityX[index]) << ", " << alignedVelocityX[index + 1] << endl;
-				cout << i << ", " << j << ", " << k << endl;
-			}
 			velocityX[getIndex(i + 1, j, k, resX + 1, resY, resZ)] = (alignedVelocityX[index] + alignedVelocityX[index + 1]) * 0.5;
 		}
 		if (cellType[index + resX] == AIR) {
@@ -2024,8 +1760,301 @@ void StaggeredGrid::extrapolateVelocity() {
 			velocityZ[getIndex(i, j, k + 1, resX, resY, resZ + 1)] = (alignedVelocityZ[index] + alignedVelocityZ[index + slabSize]) * 0.5;
 		}
 	}
-	cout << "debug0.2 " << velocityX[36805] << endl;
 }
+
+void StaggeredGrid::setInitGuess(real * out_vxGuess, real * out_vyGuess, real * out_vzGuess, real * out_rhoGuess) {
+	memcpy(out_vxGuess, velocityX, totalVX * sizeof(real));
+	memcpy(out_vyGuess, velocityY, totalVY * sizeof(real));
+	memcpy(out_vzGuess, velocityZ, totalVZ * sizeof(real));
+	memcpy(out_rhoGuess, rho, totalCells * sizeof(real));
+}
+
+
+void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess, real * vzGuess, real * rhoGuess, real * out_vxStar, real * out_vyStar, real * out_vzStar) {
+	// semilagrange u1 = advect u_n in u_guess, dt
+	advectVelocitySemiLagrange(dt, vxGuess, vyGuess, vzGuess, velocityX, velocityY, velocityZ, out_vxStar, out_vyStar, out_vzStar);
+	// eular step u* = u1 + f(rho_guess) * dt
+	real *laplaceRho = new real[totalCells];
+	laplaceRhoOnAlignedGrid(rho, laplaceRho);
+	// W'(rho)
+	real *WdRho = new real[totalCells];
+	for (int i = 0; i < totalCells; i++) {
+		WdRho[i] = funcWd(rho[i]);
+	}
+	// res+1 is copied from 0
+	// update vx
+	for (int k = 0; k < resZ; k++) {
+		for (int j = 0; j < resY; j++) {
+			for (int i = 0; i < resX; i++) {
+				int vIndex = getIndex(i, j, k, resX + 1, resY, resZ);
+				int centerRight = getIndex(i, j, k, resX, resY, resZ);
+				int centerLeft = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
+				out_vxStar[vIndex] += -(WdRho[centerRight] - WdRho[centerLeft]) / dx * dt;
+				out_vxStar[vIndex] += V_INVWE * (laplaceRho[centerRight] - laplaceRho[centerLeft]) / dx * dt;
+			}
+			out_vxStar[getIndex(resX, j, k, resX + 1, resY, resZ)] = out_vxStar[getIndex(0, j, k, resX + 1, resY, resZ)];
+		}
+	}
+	// update vy
+	for (int i = 0; i < resX; i++) {
+		for (int k = 0; k < resZ; k++) {
+			for (int j = 0; j < resY; j++) {
+				int vIndex = getIndex(i, j, k, resX, resY + 1, resZ);
+				int centerAbove = getIndex(i, j, k, resX, resY, resZ);
+				int centerBelow = getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
+				out_vyStar[vIndex] += -(WdRho[centerAbove] - WdRho[centerBelow]) / dx * dt;
+				out_vyStar[vIndex] += V_INVWE * (laplaceRho[centerAbove] - laplaceRho[centerBelow]) / dx * dt;
+			}
+			out_vyStar[getIndex(i, resY, k, resX, resY + 1, resZ)] = out_vyStar[getIndex(i, 0, k, resX, resY + 1, resZ)];
+		}
+	}
+	// update vz
+	for (int i = 0; i < resX; i++) {
+		for (int j = 0; j < resY; j++) {
+			for (int k = 0; k < resZ; k++) {
+				int vIndex = getIndex(i, j, k, resX, resY, resZ + 1);
+				int centerBack = getIndex(i, j, k, resX, resY, resZ);
+				int centerFront = getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
+				out_vzStar[vIndex] += -(WdRho[centerBack] - WdRho[centerFront]) / dx * dt;
+				out_vzStar[vIndex] += V_INVWE * (laplaceRho[centerBack] - laplaceRho[centerFront]) / dx * dt;
+			}
+			out_vzStar[getIndex(i, j, resZ, resX, resY, resZ + 1)] = out_vzStar[getIndex(i, j, 0, resX, resY, resZ + 1)];
+		}
+	}
+}
+
+void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real * vzStar, real * rhoStar, real * out_rhoPrime) {
+	/* This set of equation cannot be solved by miccg, since a_ij = -a_ji.
+	// allocate Adiag, Aplusi, Aplusj, Aplusk
+	real *Adiag = new real[totalCells];
+	real *Aplusi = new real[totalCells];
+	real *Aplusj = new real[totalCells];
+	real *Aplusk = new real[totalCells];
+	real *precon = new real[totalCells];
+	real *b = new real[totalCells];
+	// set up coefficients, todo
+	// solve for rho^*+rho'
+	for (int i = 0; i < resX; i++) {
+	for (int j = 0; j < resY; j++) {
+	for (int k = 0; k < resZ; k++) {
+	int index = getIndex(i, j, k, resX, resY, resZ);
+	real vRight		= vxStar[getIndex(i + 1, j, k,	resX + 1, resY, resZ)];
+	real vLeft		= vxStar[getIndex(i, j, k,		resX + 1, resY, resZ)];
+	real vTop		= vyStar[getIndex(i, j + 1, k,	resX, resY + 1, resZ)];
+	real vBottom	= vyStar[getIndex(i, j, k,		resX, resY + 1, resZ)];
+	real vBack		= vzStar[getIndex(i, j, k + 1,	resX, resY, resZ + 1)];
+	real vFront		= vzStar[getIndex(i, j, k,		resX, resY, resZ + 1)];
+
+	int indexRight		= getIndex((i + 1) % resX, j, k,		resX, resY, resZ);
+	int indexLeft		= getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
+	int indexTop		= getIndex(i, (j + 1) % resY, k,		resX, resY, resZ);
+	int indexBottom		= getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
+	int indexFront		= getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
+	int indexBack		= getIndex(i, j, (k + 1) % resZ,		resX, resY, resZ);
+
+	Adiag[index] = 1 / dt;
+	Aplusi[index] = vRight * 0.5;
+	}
+	}
+	}
+	// solve the equation
+	genPrecon(Adiag, Aplusi, Aplusj, Aplusk, precon);
+	solvePressure(Adiag, Aplusi, Aplusj, Aplusk, precon, out_rhoPrime, b);
+	delete[] Adiag;
+	delete[] Aplusi;
+	delete[] Aplusj;
+	delete[] Aplusk;
+	delete[] precon;
+	delete[] b;
+	*/
+	// here we first calculate rho' = rho' + rho*
+	// (rho' - rho) / dt + u . grad(rho) + rho * div(u) = 0
+	advectFieldSemiLagrange(dt, vxStar, vyStar, vzStar, rho, out_rhoPrime);
+	for (int i = 0; i < resX; i++) {
+		for (int j = 0; j < resY; j++) {
+			for (int k = 0; k < resZ; k++) {
+				int index = getIndex(i, j, k, resX, resY, resZ);
+				real vRight = vxStar[getIndex(i + 1, j, k, resX + 1, resY, resZ)];
+				real vLeft = vxStar[getIndex(i, j, k, resX + 1, resY, resZ)];
+				real vTop = vyStar[getIndex(i, j + 1, k, resX, resY + 1, resZ)];
+				real vBottom = vyStar[getIndex(i, j, k, resX, resY + 1, resZ)];
+				real vBack = vzStar[getIndex(i, j, k + 1, resX, resY, resZ + 1)];
+				real vFront = vzStar[getIndex(i, j, k, resX, resY, resZ + 1)];
+				real divergence = (vRight - vLeft + vTop - vBottom + vBack - vFront) / dx;
+				// eular
+				out_rhoPrime[index] /= (1 + divergence * dt);
+			}
+		}
+	}
+	for (int i = 0; i < totalCells; i++) {
+		out_rhoPrime[i] -= rhoStar[i];
+	}
+
+}
+
+void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, real * vzStar, real * rhoStar, real * rhoPrime, real * out_vxPrime, real * out_vyPrime, real * out_vzPrime) {
+	// This step is not mandatory, I will implement this step after other steps works.
+}
+
+bool StaggeredGrid::updateGuesses(real dt, real * io_vxGuess, real * io_vyGuess, real * io_vzGuess, real * in_vxPrime, real * in_vyPrime, real * in_vzPrime, real * io_rhoGuess, real * in_rhoPrime) {
+	real lambda_u = 0.0, lambda_rho = 1.0;
+	double squaredNormVPrime = 0.0, squaredNormRhoPrime = 0.0;
+	for (int i = 0; i < totalVX; i++) {
+		io_vxGuess[i] += lambda_u * in_vxPrime[i];
+		squaredNormVPrime += in_vxPrime[i] * in_vxPrime[i];
+	}
+	for (int i = 0; i < totalVY; i++) {
+		io_vyGuess[i] += lambda_u * in_vyPrime[i];
+		squaredNormVPrime += in_vyPrime[i] * in_vyPrime[i];
+	}
+	for (int i = 0; i < totalVZ; i++) {
+		io_vzGuess[i] += lambda_u * in_vzPrime[i];
+		squaredNormVPrime += in_vzPrime[i] * in_vzPrime[i];
+	}
+	for (int i = 0; i < totalCells; i++) {
+		io_rhoGuess[i] += lambda_rho * in_rhoPrime[i];
+		squaredNormRhoPrime += in_rhoPrime[i] * in_rhoPrime[i];
+	}
+	real tol = 1e-8;
+	if (squaredNormRhoPrime < tol && squaredNormVPrime < tol) { // norm(rho')^2 < tol
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
+void StaggeredGrid::stepSIMPLE(real dt) {
+	real *vxGuess = new real[totalVX];
+	real *vyGuess = new real[totalVY];
+	real *vzGuess = new real[totalVZ];
+	real *rhoGuess = new real[totalCells];
+	setInitGuess(vxGuess, vyGuess, vzGuess, rhoGuess);
+	while (true) {
+		// skipped step
+		real *rhoStar = new real[totalCells];
+		memcpy(rhoStar, rhoGuess, totalCells * sizeof(real));
+
+		real *vxStar = new real[totalVX];
+		real *vyStar = new real[totalVY];
+		real *vzStar = new real[totalVZ];
+		computeVelocityStar(dt, vxGuess, vyGuess, vzGuess, rhoGuess, vxStar, vyStar, vzStar);
+
+		real *rhoPrime = new real[totalCells];
+		computeRhoPrime(dt, vxStar, vyStar, vzStar, rhoStar, rhoPrime);
+
+		real *vxPrime = new real[totalVX];
+		real *vyPrime = new real[totalVY];
+		real *vzPrime = new real[totalVZ];
+		computeVelocityPrime(dt, vxStar, vyStar, vzStar, rhoStar, rhoPrime, vxPrime, vyPrime, vzPrime);
+
+		bool converged = updateGuesses(dt, vxGuess, vyGuess, vzGuess, vxPrime, vyPrime, vzPrime, rhoGuess, rhoPrime);
+		delete[] rhoStar;
+		delete[] vxStar;
+		delete[] vyStar;
+		delete[] vzStar;
+		delete[] rhoPrime;
+		delete[] vxPrime;
+		delete[] vyPrime;
+		delete[] vzPrime;
+		if (converged) {
+			break;
+		}
+	}
+	memcpy(velocityX, vxGuess, totalVX * sizeof(real));
+	memcpy(velocityY, vyGuess, totalVY * sizeof(real));
+	memcpy(velocityZ, vzGuess, totalVZ * sizeof(real));
+	memcpy(rho, rhoGuess, totalCells * sizeof(real));
+	delete[] vxGuess;
+	delete[] vyGuess;
+	delete[] vzGuess;
+	delete[] rhoGuess;
+}
+
+void StaggeredGrid::addBubble() {
+
+	//if (_totalTime>1.2) return;
+
+	//assuming _res[0]=_res[1]=_res[2] (>=128)
+	float xTotal = dx*resX;
+	float yTotal = dx*resY;
+	float zTotal = dx*resZ;
+
+	Vec3f bubble1 = Vec3f(0.41, 0.50, 0.50) * xTotal;// *_xRes;
+	Vec3f bubble2 = Vec3f(0.67, 0.50, 0.50) * yTotal;// *_yRes;
+	float Rb1 = 0.16 * xTotal;// *_xRes;
+	float Rb2 = 0.08 * yTotal;// *_xRes;
+
+	double totalmass = 0;
+
+	for (int z = 0; z < resZ; z++)
+		for (int y = 0; y < resY; y++)
+			for (int x = 0; x < resX; x++)
+			{
+				int index = x + y * resX + z * slabSize;
+				rho[index] = 500.0f; //liquid dens
+
+				Vec3f gc = Vec3f(x + 0.5, y + 0.5, z + 0.5) * dx;
+
+				//bubble1
+				Vec3f dis = gc - bubble1;
+
+				if (mag2(dis)<Rb1*Rb1) {
+					// _density[index] = 5e-7f;  //vapor dens
+					rho[index] = 0.5f;  //vapor dens
+				}
+
+				//bubble2
+				dis = gc - bubble2;
+
+				if (mag2(dis)<Rb2*Rb2) {
+					rho[index] = 0.5f;  //vapor dens
+				}
+				totalmass += rho[index];
+			}
+	printf("initial total mass: %f\n", totalmass);
+	return;
+}
+
+void StaggeredGrid::runSIMPLE() {
+	timeStep = new TimeStepController(config->totalFrame(), config->gridFPS(), config->gridDt());
+
+	addBubble();
+
+	while (!timeStep->isFinished()) {
+		stepSIMPLE(timeStep->getStepDt());
+		int fmCnt;
+		if (timeStep->isFrameTime(fmCnt)) {
+			;
+		}
+		std::cout << "This step elapsed *** seconds." << std::endl;
+	}
+	delete timeStep;
+	std::cout << "Total elapsed *** seconds." << std::endl;
+}
+
+void StaggeredGrid::laplaceRhoOnAlignedGrid(real * rho, real * out_laplacianRho) {
+	for (int i = 0; i < resX; i++) {
+		for (int j = 0; j < resY; j++) {
+			for (int k = 0; k < resZ; k++) {
+				int center = getIndex(i, j, k, resX, resY, resZ);
+				int left = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
+				int right = getIndex((i + 1) % resX, j, k, resX, resY, resZ);
+				int up = getIndex(i, (j + 1) % resY, k, resX, resY, resZ);
+				int bottom = getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
+				int front = getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
+				int back = getIndex(i, j, (k + 1) % resZ, resX, resY, resZ);
+				out_laplacianRho[center] = (rho[left] + rho[right] + rho[up] + rho[bottom] + rho[front] + rho[back] - 6 * rho[center]) / dx / dx;
+			}
+		}
+	}
+}
+
+
+real StaggeredGrid::funcWd(real r) {
+	return -2 * V_PA * r + V_RTM * log(r / (V_PB - r)) + V_RTM * V_PB / (r - V_PB);
+}
+
 
 StaggeredGrid::StaggeredGrid(bool test) {
 	resX = resY = 100; resZ = 5;
@@ -2093,10 +2122,10 @@ void StaggeredGrid::test() {
 	}
 	dumpSlicePreview(4, signedDistanceField, 1, 0.2);
 	dumpSlicePreview(9, img, 1, 1);
-	
+
 	extrapolateVelocity();
 
-	
+
 	real vx, vy, vz;
 	getAveragedVelocityAt(5.5, 8, 3, vx, vy, vz);
 	cout << vx << ", " << vy << ", " << vz << endl;

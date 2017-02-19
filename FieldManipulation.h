@@ -2,6 +2,11 @@
 #include "stdafx.h"
 #include <string>
 #include <iostream>
+
+inline int ifloor(real x) {
+	return (x > 0) ? (int)x : (int)x - 1;
+}
+
 inline int getIndex(int x, int y, int z, int dimX, int dimY, int dimZ) {
 	return x + y * dimX + z * dimX * dimY;
 }

@@ -37,7 +37,6 @@ public:
 	void dumpSlicePreview(int No, real * field, int z, float scale);
 	void dumpSlicePreview(int No, CELL_TYPE * field, int z);
 	void addWater(); // fill the [left, rightmost] box region with water.
-	void test();
 	void run();
 	void runWater();
 
@@ -116,7 +115,7 @@ private:
 	void extrapolateVelocity();
 
 
-	// the (fake)``SIMPLE'' algorithm
+	// the (fake) ``SIMPLE'' algorithm. implemented in simple.c
 private:
 	// Coding note:
 	// do not use _old field variables as member, allocate temporary arrays when necessary.

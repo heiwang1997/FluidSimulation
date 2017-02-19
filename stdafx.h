@@ -11,5 +11,5 @@
 #include <tchar.h>
 
 // TODO: reference additional headers your program requires here
-
+#define IFLOOR
 typedef float real;

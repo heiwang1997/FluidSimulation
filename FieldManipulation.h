@@ -7,6 +7,25 @@ inline int ifloor(real x) {
 	return (x > 0) ? (int)x : (int)x - 1;
 }
 
+inline int loopIndex(int pos, int dim) {
+	if (pos >= 0) {
+		return pos % dim;
+	}
+	else {
+		return dim - (-pos % dim);
+	}
+}
+
+inline real fieldMax(real *f, int l) {
+	real max = 0;
+	for (int i = 0; i < l; i++) {
+		if (f[i] * f[i] > max) {
+			max = f[i] * f[i];
+		}
+	}
+	return max;
+}
+
 inline int getIndex(int x, int y, int z, int dimX, int dimY, int dimZ) {
 	return x + y * dimX + z * dimX * dimY;
 }

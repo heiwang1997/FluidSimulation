@@ -1,4 +1,10 @@
+#include "stdafx.h"
 #include "StaggeredGrid.h"
+#include "FieldManipulation.h"
+#include "config.h"
+
+using std::cout;
+using std::endl;
 
 void StaggeredGrid::setInitGuess(real * out_vxGuess, real * out_vyGuess, real * out_vzGuess, real * out_rhoGuess) {
 	memcpy(out_vxGuess, velocityX, totalVX * sizeof(real));
@@ -11,6 +17,7 @@ void StaggeredGrid::setInitGuess(real * out_vxGuess, real * out_vyGuess, real * 
 void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess, real * vzGuess, real * rhoGuess, real * out_vxStar, real * out_vyStar, real * out_vzStar) {
 	// semilagrange u1 = advect u_n in u_guess, dt
 	advectVelocitySemiLagrange(dt, vxGuess, vyGuess, vzGuess, velocityX, velocityY, velocityZ, out_vxStar, out_vyStar, out_vzStar);
+	cout << "  vx' after advection" << fieldMax(out_vxStar, totalVX) << endl;
 	// eular step u* = u1 + f(rho_guess) * dt
 	real *laplaceRho = new real[totalCells];
 	laplaceRhoOnAlignedGrid(rho, laplaceRho);
@@ -20,7 +27,13 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 		WdRho[i] = funcWd(rho[i]);
 	}
 	// res+1 is copied from 0
+
+	cout << "dx, dt " << dx << " " << dt << endl;
+	// !!! laplace rho can be very large due to the discontinuity of rho. (1)
+	cout << "laplace rho " << fieldMax(laplaceRho, totalCells) << endl;
+	cout << "func(rho)" << fieldMax(WdRho, totalCells) << endl;
 	// update vx
+	// !!! due to (1), v* can be very large. (2)
 	for (int k = 0; k < resZ; k++) {
 		for (int j = 0; j < resY; j++) {
 			for (int i = 0; i < resX; i++) {
@@ -59,55 +72,18 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 			out_vzStar[getIndex(i, j, resZ, resX, resY, resZ + 1)] = out_vzStar[getIndex(i, j, 0, resX, resY, resZ + 1)];
 		}
 	}
+	cout << "  vx' euler" << fieldMax(out_vxStar, totalVX) << endl;
 }
 
 void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real * vzStar, real * rhoStar, real * out_rhoPrime) {
-	/* This set of equation cannot be solved by miccg, since a_ij = -a_ji.
-	// allocate Adiag, Aplusi, Aplusj, Aplusk
-	real *Adiag = new real[totalCells];
-	real *Aplusi = new real[totalCells];
-	real *Aplusj = new real[totalCells];
-	real *Aplusk = new real[totalCells];
-	real *precon = new real[totalCells];
-	real *b = new real[totalCells];
-	// set up coefficients, todo
-	// solve for rho^*+rho'
-	for (int i = 0; i < resX; i++) {
-	for (int j = 0; j < resY; j++) {
-	for (int k = 0; k < resZ; k++) {
-	int index = getIndex(i, j, k, resX, resY, resZ);
-	real vRight		= vxStar[getIndex(i + 1, j, k,	resX + 1, resY, resZ)];
-	real vLeft		= vxStar[getIndex(i, j, k,		resX + 1, resY, resZ)];
-	real vTop		= vyStar[getIndex(i, j + 1, k,	resX, resY + 1, resZ)];
-	real vBottom	= vyStar[getIndex(i, j, k,		resX, resY + 1, resZ)];
-	real vBack		= vzStar[getIndex(i, j, k + 1,	resX, resY, resZ + 1)];
-	real vFront		= vzStar[getIndex(i, j, k,		resX, resY, resZ + 1)];
 
-	int indexRight		= getIndex((i + 1) % resX, j, k,		resX, resY, resZ);
-	int indexLeft		= getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
-	int indexTop		= getIndex(i, (j + 1) % resY, k,		resX, resY, resZ);
-	int indexBottom		= getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
-	int indexFront		= getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
-	int indexBack		= getIndex(i, j, (k + 1) % resZ,		resX, resY, resZ);
-
-	Adiag[index] = 1 / dt;
-	Aplusi[index] = vRight * 0.5;
-	}
-	}
-	}
-	// solve the equation
-	genPrecon(Adiag, Aplusi, Aplusj, Aplusk, precon);
-	solvePressure(Adiag, Aplusi, Aplusj, Aplusk, precon, out_rhoPrime, b);
-	delete[] Adiag;
-	delete[] Aplusi;
-	delete[] Aplusj;
-	delete[] Aplusk;
-	delete[] precon;
-	delete[] b;
-	*/
 	// here we first calculate rho' = rho' + rho*
 	// (rho' - rho) / dt + u . grad(rho) + rho * div(u) = 0
-	advectFieldSemiLagrange(dt, vxStar, vyStar, vzStar, rho, out_rhoPrime);
+	cout << "  advect rho, vx" << fieldMax(vxStar, totalVX) << " rho " << fieldMax(rho, totalCells) << endl;
+	// due to (2), v* can have very large value. (3)
+	advectFieldSemiLagrange(dt, vxStar, vyStar, vzStar, rho, out_rhoPrime, true);
+
+	cout << "  solve rho'" << endl;
 	for (int i = 0; i < resX; i++) {
 		for (int j = 0; j < resY; j++) {
 			for (int k = 0; k < resZ; k++) {
@@ -127,7 +103,7 @@ void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real 
 	for (int i = 0; i < totalCells; i++) {
 		out_rhoPrime[i] -= rhoStar[i];
 	}
-
+	cout << "  finished" << endl;
 }
 
 void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, real * vzStar, real * rhoStar, real * rhoPrime, real * out_vxPrime, real * out_vyPrime, real * out_vzPrime) {
@@ -167,26 +143,35 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 	real *vyGuess = new real[totalVY];
 	real *vzGuess = new real[totalVZ];
 	real *rhoGuess = new real[totalCells];
+	cout << "set initial guess" << endl;
 	setInitGuess(vxGuess, vyGuess, vzGuess, rhoGuess);
+	
 	while (true) {
 		// skipped step
 		real *rhoStar = new real[totalCells];
 		memcpy(rhoStar, rhoGuess, totalCells * sizeof(real));
 
+		cout << "compute v*" << endl;
 		real *vxStar = new real[totalVX];
 		real *vyStar = new real[totalVY];
 		real *vzStar = new real[totalVZ];
 		computeVelocityStar(dt, vxGuess, vyGuess, vzGuess, rhoGuess, vxStar, vyStar, vzStar);
+		cout << "vx' " << fieldMax(vxStar, totalVX) << endl;
 
+		cout << "compute rho'" << endl;
 		real *rhoPrime = new real[totalCells];
 		computeRhoPrime(dt, vxStar, vyStar, vzStar, rhoStar, rhoPrime);
 
+		cout << "compute v'" << endl;
 		real *vxPrime = new real[totalVX];
 		real *vyPrime = new real[totalVY];
 		real *vzPrime = new real[totalVZ];
 		computeVelocityPrime(dt, vxStar, vyStar, vzStar, rhoStar, rhoPrime, vxPrime, vyPrime, vzPrime);
 
+		cout << "update guess" << endl;
 		bool converged = updateGuesses(dt, vxGuess, vyGuess, vzGuess, vxPrime, vyPrime, vzPrime, rhoGuess, rhoPrime);
+
+		cout << "converged: " << converged << endl;
 		delete[] rhoStar;
 		delete[] vxStar;
 		delete[] vyStar;
@@ -231,7 +216,7 @@ void StaggeredGrid::addBubble() {
 			{
 				int index = x + y * resX + z * slabSize;
 				rho[index] = 500.0f; //liquid dens
-
+				// continue;
 				Vec3f gc = Vec3f(x + 0.5, y + 0.5, z + 0.5) * dx;
 
 				//bubble1
@@ -275,13 +260,13 @@ void StaggeredGrid::laplaceRhoOnAlignedGrid(real * rho, real * out_laplacianRho)
 	for (int i = 0; i < resX; i++) {
 		for (int j = 0; j < resY; j++) {
 			for (int k = 0; k < resZ; k++) {
-				int center = getIndex(i, j, k, resX, resY, resZ);
-				int left = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
-				int right = getIndex((i + 1) % resX, j, k, resX, resY, resZ);
-				int up = getIndex(i, (j + 1) % resY, k, resX, resY, resZ);
-				int bottom = getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
-				int front = getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
-				int back = getIndex(i, j, (k + 1) % resZ, resX, resY, resZ);
+				int center	= getIndex(i, j, k, resX, resY, resZ);
+				int left	= getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
+				int right	= getIndex((i + 1) % resX, j, k, resX, resY, resZ);
+				int up		= getIndex(i, (j + 1) % resY, k, resX, resY, resZ);
+				int bottom	= getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
+				int front	= getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
+				int back	= getIndex(i, j, (k + 1) % resZ, resX, resY, resZ);
 				out_laplacianRho[center] = (rho[left] + rho[right] + rho[up] + rho[bottom] + rho[front] + rho[back] - 6 * rho[center]) / dx / dx;
 			}
 		}

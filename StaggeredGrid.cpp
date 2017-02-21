@@ -461,6 +461,7 @@ void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, r
 #else
 
 				// locate neighbors to interpolate
+				// due to unexpectedly large value of v*, the trace back position may be far away from [0, resX], 
 				const int x0 = (ifloor(xTrace) + resX) % resX;
 				const int x1 = (x0 + 1) % resX;
 				const int y0 = (ifloor(yTrace) + resY) % resY;

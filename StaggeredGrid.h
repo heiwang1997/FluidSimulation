@@ -125,7 +125,7 @@ private:
 	// memory is allocated and recycled in the scope where variables are defined.
 	// pointers are never copied except in argument passing.
 	real *rho;
-	bool loopBoundary = false;
+	bool loopBoundary = true;
 	const float V_PA = 5536.0e-10;
 	const float V_PB = 5.9e2;
 	const float V_RTM = 1.72;

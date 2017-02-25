@@ -12,16 +12,33 @@ inline int loopIndex(int pos, int dim) {
 		return pos % dim;
 	}
 	else {
-		return dim - (-pos % dim);
+		return pos % dim + dim;
 	}
 }
 
-inline real fieldMax(real *f, int l) {
+inline real fieldMax(real *f, int l, bool checkZero = false) {
 	real max = 0;
+	bool zero = false, allZero = true;
 	for (int i = 0; i < l; i++) {
+		if (f[i] != f[i]) {
+			std::cout << "INF" << std::endl; 
+			exit(0);
+		}
+		if (f[i] == 0) {
+			zero = true;
+		}
+		else {
+			allZero = false;
+		}
 		if (f[i] * f[i] > max) {
 			max = f[i] * f[i];
 		}
+	}
+	if (zero && checkZero) {
+		std::cout << "zero value occurred." << std::endl;
+	}
+	if (allZero && checkZero) {
+		std::cout << "all zero field."<< std::endl;
 	}
 	return max;
 }

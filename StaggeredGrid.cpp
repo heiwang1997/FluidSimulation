@@ -133,11 +133,17 @@ void StaggeredGrid::dumpSlicePreview(int No, real * field, int z, float scale) {
 	float *buf = new float[nitems];
 	for (int i = 0; i<nitems; i++)
 		buf[i] = 0.0f;
+	scale = 0.2;
 	for (int x = 0; x < resX; x++) {
 		for (int y = 0; y < resY; y++) {
 			const int index = getIndex(x, y, z, resX, resY, resZ);
 			const int bufindex = x + y * resX;
-			buf[bufindex] = field[index] * scale;
+			if (field[index] > 590 || field[index] < 0) {
+				buf[bufindex] = -1.0;
+			}
+			else {
+				buf[bufindex] = (log(field[index]) + 2) * scale;
+			}
 		}
 	}
 	dumpNumberedPNG(No, "result/slice", buf, resX, resY);
@@ -413,10 +419,13 @@ void StaggeredGrid::advectFieldMacCormack(const real dt, real *vx, real *vy, rea
 // tested for advection
 void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, real *vz,
 	real *fieldOld, real *fieldNew, bool clampExtrema = false) {
+	cout << "    ****" << endl;
+	cout << "    advectFSemi on entry: " << fieldMax(fieldOld, totalCells, true) << endl;
 	// scale dt up to grid resolution
-	for (int z = 1; z < resZ - 1; z++) {
-		for (int y = 1; y < resY - 1; y++) {
-			for (int x = 1; x < resX - 1; x++) {
+	int border = loopBoundary ? 0 : 1;
+	for (int z = border; z < resZ - border; z++) {
+		for (int y = border; y < resY - border; y++) {
+			for (int x = border; x < resX - border; x++) {
 				int index = getIndex(x, y, z, resX, resY, resZ);
 
 				int vxLeftIndex = getIndex(x, y, z, resX + 1, resY, resZ);
@@ -462,11 +471,11 @@ void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, r
 
 				// locate neighbors to interpolate
 				// due to unexpectedly large value of v*, the trace back position may be far away from [0, resX], 
-				const int x0 = (ifloor(xTrace) + resX) % resX;
+				const int x0 = loopIndex(ifloor(xTrace), resX);
 				const int x1 = (x0 + 1) % resX;
-				const int y0 = (ifloor(yTrace) + resY) % resY;
+				const int y0 = loopIndex(ifloor(yTrace), resY);
 				const int y1 = (y0 + 1) % resY;
-				const int z0 = (ifloor(zTrace) + resZ) % resZ;
+				const int z0 = loopIndex(ifloor(zTrace), resZ);
 				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
@@ -487,7 +496,7 @@ void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, r
 				const int i111 = getIndex(x1, y1, z1, resX, resY, resZ);
 
 				// interpolate
-				if (!clampExtrema) {
+				// if (!clampExtrema) {
 					fieldNew[index] = u0 * (s0 * (t0 * fieldOld[i000] +
 						t1 * fieldOld[i010]) +
 						s1 * (t0 * fieldOld[i100] +
@@ -496,8 +505,8 @@ void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, r
 							t1 * fieldOld[i011]) +
 							s1 * (t0 * fieldOld[i101] +
 								t1 * fieldOld[i111]));
-				}
-				else {
+				
+				if (clampExtrema) {
 					real minValue = min(fieldOld[i000], fieldOld[i001], fieldOld[i010], fieldOld[i011],
 						fieldOld[i100], fieldOld[i101], fieldOld[i110], fieldOld[i111]);
 					real maxValue = max(fieldOld[i000], fieldOld[i001], fieldOld[i010], fieldOld[i011],
@@ -508,6 +517,8 @@ void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, r
 			}
 		}
 	}
+	cout << "    advectFSemi on exit: " << fieldMax(fieldNew, totalCells, true) << endl;
+	cout << "    *****" << endl;
 }
 
 void StaggeredGrid::clampOutsideRays(const real dt, real *vx, real *vy, real *vz, real *fieldNew, const real *interimField) {
@@ -568,9 +579,10 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 	real * vxInterim, real *vyInterim, real *vzInterim,
 	real * vxNew, real * vyNew, real * vzNew) {
 	// velocity X
-	for (int z = 1; z < resZ - 1; z++) {
-		for (int y = 1; y < resY - 1; y++) {
-			for (int x = 2; x < resX - 1; x++) {
+	int border = loopBoundary ? 0 : 1;
+	for (int z = border; z < resZ - border; z++) {
+		for (int y = border; y < resY - border; y++) {
+			for (int x = border + 1; x < resX - border; x++) {
 				int index = getIndex(x, y, z, resX + 1, resY, resZ);
 				float velx = vxBackground[index];
 				float vely = (
@@ -620,11 +632,11 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 
 #else
 				// locate neighbors to interpolate
-				const int x0 = (ifloor(xTrace) + resX) % resX;
+				const int x0 = loopIndex(ifloor(xTrace), resX);
 				const int x1 = (x0 + 1) % resX;
-				const int y0 = (ifloor(yTrace) + resY) % resY;
+				const int y0 = loopIndex(ifloor(yTrace), resY);
 				const int y1 = (y0 + 1) % resY;
-				const int z0 = (ifloor(zTrace) + resZ) % resZ;
+				const int z0 = loopIndex(ifloor(zTrace), resZ);
 				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
@@ -660,9 +672,9 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 		}
 	}
 	// velocity Y
-	for (int z = 1; z < resZ - 1; z++) {
-		for (int y = 2; y < resY - 1; y++) {
-			for (int x = 1; x < resX - 1; x++) {
+	for (int z = border; z < resZ - border; z++) {
+		for (int y = 2; y < resY - border; y++) {
+			for (int x = border; x < resX - border; x++) {
 				int index = getIndex(x, y, z, resX, resY + 1, resZ);
 				float velx = (
 					vxBackground[getIndex(x, y - 1, z, resX + 1, resY, resZ)] +
@@ -707,11 +719,11 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				const float u1 = zTrace - (int)zTrace;
 				const float u0 = 1.0f - u1;
 #else
-				const int x0 = (ifloor(xTrace) + resX) % resX;
+				const int x0 = loopIndex(ifloor(xTrace), resX);
 				const int x1 = (x0 + 1) % resX;
-				const int y0 = (ifloor(yTrace) + resY) % resY;
+				const int y0 = loopIndex(ifloor(yTrace), resY);
 				const int y1 = (y0 + 1) % resY;
-				const int z0 = (ifloor(zTrace) + resZ) % resZ;
+				const int z0 = loopIndex(ifloor(zTrace), resZ);
 				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
@@ -744,9 +756,9 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 		}
 	}
 	// velocity Z
-	for (int z = 2; z < resZ - 1; z++) {
-		for (int y = 1; y < resY - 1; y++) {
-			for (int x = 1; x < resX - 1; x++) {
+	for (int z = border + 1; z < resZ - border; z++) {
+		for (int y = border; y < resY - border; y++) {
+			for (int x = border; x < resX - border; x++) {
 				int index = getIndex(x, y, z, resX, resY, resZ + 1);
 				real velx = (
 					vxBackground[getIndex(x, y, z - 1, resX + 1, resY, resZ)] +
@@ -792,11 +804,11 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				const float u0 = 1.0f - u1;
 
 #else
-				const int x0 = (ifloor(xTrace) + resX) % resX;
+				const int x0 = loopIndex(ifloor(xTrace), resX);
 				const int x1 = (x0 + 1) % resX;
-				const int y0 = (ifloor(yTrace) + resY) % resY;
+				const int y0 = loopIndex(ifloor(yTrace), resY);
 				const int y1 = (y0 + 1) % resY;
-				const int z0 = (ifloor(zTrace) + resZ) % resZ;
+				const int z0 = loopIndex(ifloor(zTrace), resZ);
 				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights

@@ -104,6 +104,7 @@ void StaggeredGrid::addSingleExplosion() {
 	}
 }
 
+// note that a new drawing function is defined
 void StaggeredGrid::dumpPreview(real *field, int No) {
 	const int nitems = resX * resY;
 	const int otherDir = 2;
@@ -175,6 +176,7 @@ void StaggeredGrid::dumpSlicePreview(int No, CELL_TYPE * field, int z) {
 	delete[] buf;
 }
 
+/* modify the implementation of this method to add volume of water. by specifying a sdf.*/
 void StaggeredGrid::addWater() {
 	mode = WATER;
 	setBorderType(cellType, resX, resY, resZ, SOLID);
@@ -206,10 +208,11 @@ void StaggeredGrid::run() {
 	delete timeStep;
 	std::cout << "Total elapsed *** seconds." << std::endl;
 }
-
+/* the triangle example */
 void StaggeredGrid::runWater() {
 	timeStep = new TimeStepController(config->totalFrame(), config->gridFPS(), config->gridDt());
-
+	bool oldValue = loopBoundary;
+	loopBoundary = false;
 	cout << "Simulation started." << endl;
 	addWater();
 
@@ -224,6 +227,7 @@ void StaggeredGrid::runWater() {
 		std::cout << "Step finished" << std::endl;
 	}
 	delete timeStep;
+	loopBoundary = oldValue;
 }
 
 void StaggeredGrid::step(real _dt) {
@@ -418,9 +422,9 @@ void StaggeredGrid::advectFieldMacCormack(const real dt, real *vx, real *vy, rea
 
 // tested for advection
 void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, real *vz,
-	real *fieldOld, real *fieldNew, bool clampExtrema = false) {
+	real *fieldOld, real *fieldNew, bool clampExtrema = false) {/*
 	cout << "    ****" << endl;
-	cout << "    advectFSemi on entry: " << fieldMax(fieldOld, totalCells, true) << endl;
+	cout << "    advectFSemi on entry: " << fieldMax(fieldOld, totalCells, true) << endl;*/
 	// scale dt up to grid resolution
 	int border = loopBoundary ? 0 : 1;
 	for (int z = border; z < resZ - border; z++) {
@@ -496,7 +500,7 @@ void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, r
 				const int i111 = getIndex(x1, y1, z1, resX, resY, resZ);
 
 				// interpolate
-				// if (!clampExtrema) {
+				if (!clampExtrema) {
 					fieldNew[index] = u0 * (s0 * (t0 * fieldOld[i000] +
 						t1 * fieldOld[i010]) +
 						s1 * (t0 * fieldOld[i100] +
@@ -505,8 +509,8 @@ void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, r
 							t1 * fieldOld[i011]) +
 							s1 * (t0 * fieldOld[i101] +
 								t1 * fieldOld[i111]));
-				
-				if (clampExtrema) {
+				}
+				else {
 					real minValue = min(fieldOld[i000], fieldOld[i001], fieldOld[i010], fieldOld[i011],
 						fieldOld[i100], fieldOld[i101], fieldOld[i110], fieldOld[i111]);
 					real maxValue = max(fieldOld[i000], fieldOld[i001], fieldOld[i010], fieldOld[i011],
@@ -516,9 +520,9 @@ void StaggeredGrid::advectFieldSemiLagrange(const real dt, real *vx, real *vy, r
 				}
 			}
 		}
-	}
+	}/*
 	cout << "    advectFSemi on exit: " << fieldMax(fieldNew, totalCells, true) << endl;
-	cout << "    *****" << endl;
+	cout << "    *****" << endl;*/
 }
 
 void StaggeredGrid::clampOutsideRays(const real dt, real *vx, real *vy, real *vz, real *fieldNew, const real *interimField) {
@@ -573,7 +577,9 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt, real * vx, real * 
 	advectVelocitySemiLagrange(dt, vx, vy, vz, vx, vy, vz, vxNew, vyNew, vzNew);
 }
 
-/* advect vx, vy, vz inside background value, new values are stored in vNew */
+/* advect vx, vy, vz inside background value, new values are stored in vNew 
+the IFLOOR macro indicates a new floor() function being used other than (int)
+*/
 void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 	real * vxBackground, real * vyBackground, real * vzBackground,
 	real * vxInterim, real *vyInterim, real *vzInterim,
@@ -844,7 +850,12 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 	}
 }
 
-
+/* modify this function if you want to MAKE WALLS MOVE.
+advices on making moving walls:
+	add member vars to StaggeredGrid to track each boundary;
+	use the vars to change the bounary of FOR loop;
+	modify the divergence term.
+*/
 void StaggeredGrid::project() {
 
 	unsigned char *cellFlag = new unsigned char[totalCells];
@@ -902,7 +913,7 @@ void StaggeredGrid::project() {
 	real *Aplusi = new real[totalCells]; memset(Aplusi, 0, totalCells * sizeof(real));
 	real *Aplusj = new real[totalCells]; memset(Aplusj, 0, totalCells * sizeof(real));
 	real *Aplusk = new real[totalCells]; memset(Aplusk, 0, totalCells * sizeof(real));
-	cout << Adiag[totalCells - 1] << endl;
+	// cout << Adiag[totalCells - 1] << endl;
 	genA(Adiag, Aplusi, Aplusj, Aplusk, 1.0f);
 	// Boundaries are set to SOLID. Different from lodsmoke.
 	real *preconA = new real[totalCells]; memset(preconA, 0, totalCells);
@@ -1218,7 +1229,8 @@ void StaggeredGrid::updateCellType(real * sdf) {
 
 #include<set>
 #include<vector>
-
+/* this data structure and several simple functions below basically implements priority
+queue using stl utilities. */
 struct IndexDistanceWrapper {
 	IndexDistanceWrapper(int _i, real _d) : index(_i), distance(_d) { assert(_d >= 0); }
 	int index = -1;
@@ -1252,7 +1264,10 @@ void vecCopy(Vec3f *s, Vec3f *t) {
 	t->v[2] = s->v[2];
 }
 
-/* re-assign sdf according to the interface it implies */
+/* re-assign sdf according to the interface it implies. lots of assertions are preserved.
+Please read Fluid simulation for CG by R. Bridson, this code exactly implements his idea.
+If you find it necessary to understand the details of this certain piece, please contact
+guyu13@mails.tsinghua.edu.cn */
 void StaggeredGrid::computeSignedDistanceField(real *sdf) {
 	for (int i = 0; i < totalCells; i++) {
 		levelSetInfo[i] = UNKNOWN;
@@ -1407,7 +1422,7 @@ void StaggeredGrid::computeSignedDistanceField(real *sdf) {
 			;
 		}
 	}
-	cout << signedDistanceField[getIndex(0, 0, 3, resX, resY, resZ)] << endl;
+	// cout << signedDistanceField[getIndex(0, 0, 3, resX, resY, resZ)] << endl;
 	for (int i = 0; i < totalCells; i++) {
 		assert(usdf[i] >= 0);
 		if (cellType[i] == AIR) {
@@ -1525,6 +1540,7 @@ void StaggeredGrid::findSurfaceCells(real *sdf, real *usdf) {
 	assert(interfaceFound);
 }
 
+/* I recommended rewrite the following if you want to add new features. */
 int StaggeredGrid::isValidVelocity(int i, int j, int k, int direction) {
 	switch (direction) {
 	case 0:
@@ -1543,6 +1559,7 @@ int StaggeredGrid::isValidVelocity(int i, int j, int k, int direction) {
 	}
 }
 
+/* get the velocity at a surface point */
 void StaggeredGrid::getAveragedVelocityAt(real x, real y, real z, real &vx, real &vy, real &vz) {
 	real xInX = x + 0.5;
 	real yInY = y + 0.5;
@@ -1729,6 +1746,7 @@ void StaggeredGrid::getAveragedVelocityAt(real x, real y, real z, real &vx, real
 	}
 }
 
+/* extrapolate the velocity at points outside the fluid, using the value of the nearest fluid point*/
 void StaggeredGrid::extrapolateVelocity() {
 	real *alignedVelocityX = new real[totalCells];
 	real *alignedVelocityY = new real[totalCells];
@@ -1777,6 +1795,7 @@ void StaggeredGrid::extrapolateVelocity() {
 	}
 }
 
+/* this is a debugging interface, you may define your own and delete this one safely*/
 StaggeredGrid::StaggeredGrid(bool test) {
 	resX = resY = 100; resZ = 5;
 	totalCells = resX * resY * resZ;

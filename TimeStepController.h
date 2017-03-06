@@ -43,6 +43,9 @@ public:
 		}
 		return dt;
 	}
+	/* Whenever the dt * fps -> one frame duration,
+	the frameFlag is set, indicating a new actual 'frame' shoule be generated.
+	 */
 	bool isFrameTime(int &frameCnt) {
 		if (_frameFlag) {
 			frameCnt = _frameCnt++;

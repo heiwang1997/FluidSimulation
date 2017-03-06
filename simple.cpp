@@ -27,12 +27,12 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 		cout << " =====" << endl;
 	}
 	advectVelocitySemiLagrange(dt, vxGuess, vyGuess, vzGuess, velocityX, velocityY, velocityZ, out_vxStar, out_vyStar, out_vzStar);
-	if (debugOutput) cout << "  vxStar after advection: " << fieldMax(out_vxStar, totalVX) << endl;
+	// if (debugOutput) cout << "  vxStar after advection: " << fieldMax(out_vxStar, totalVX) << endl;
 	// eular step u* = u1 + f(rho_guess) * dt
 	real *laplaceRho = new real[totalCells];
-	if (debugOutput) cout << "  rho: " << fieldMax(rho, totalCells, true) << endl;
+	//if (debugOutput) cout << "  rho: " << fieldMax(rho, totalCells, true) << endl;
 	laplaceRhoOnAlignedGrid(rho, laplaceRho);
-	if (debugOutput) cout << "  laplaceRho: " << fieldMax(laplaceRho, totalCells) << endl;
+	//if (debugOutput) cout << "  laplaceRho: " << fieldMax(laplaceRho, totalCells) << endl;
 	// W'(rho)
 	real *WdRho = new real[totalCells];
 	for (int i = 0; i < totalCells; i++) {
@@ -48,6 +48,9 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 	// cout << "func(rho)" << fieldMax(WdRho, totalCells) << endl;
 	// update vx
 	// !!! due to (1), v* can be very large. (2)
+
+	// Question: When discretizing, why use center-left? Why use res+1 -> 0?
+	// Also, what about boundary conditions?
 	for (int k = 0; k < resZ; k++) {
 		for (int j = 0; j < resY; j++) {
 			for (int i = 0; i < resX; i++) {
@@ -98,6 +101,7 @@ void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real 
 		cout << "  rhoStar: " << fieldMax(rhoStar, totalCells, true) << endl;
 		cout << " ======" << endl;
 	}
+	// This step utilize the Continuity Equation.
 	// here we first calculate rho' + rho*
 	// (rho' - rho) / dt + u . grad(rho) + rho * div(u) = 0
 
@@ -116,7 +120,8 @@ void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real 
 				real vBack = vzStar[getIndex(i, j, k + 1, resX, resY, resZ + 1)];
 				real vFront = vzStar[getIndex(i, j, k, resX, resY, resZ + 1)];
 				real divergence = (vRight - vLeft + vTop - vBottom + vBack - vFront) / dx;
-				// eular
+				// eular: Question: Why divide equal instead of multiply equal?
+				// Will it converge?
 				out_rhoPrime[index] /= (1 + divergence * dt);
 			}
 		}
@@ -142,6 +147,7 @@ bool StaggeredGrid::updateGuesses(real dt, real * io_vxGuess, real * io_vyGuess,
 		cout << "  i_rhoGuess: " << fieldMax(io_rhoGuess, totalCells, true) << endl;
 		cout << " =======" << endl;
 	}
+	// Question: Why here is 0? Actually, why there is lambda_u and lambda_rho?
 	real lambda_u = 0.0, lambda_rho = 1.0;
 	double squaredNormVPrime = 0.0, squaredNormRhoPrime = 0.0;
 	for (int i = 0; i < totalVX; i++) {
@@ -170,6 +176,7 @@ bool StaggeredGrid::updateGuesses(real dt, real * io_vxGuess, real * io_vyGuess,
 }
 
 void StaggeredGrid::stepSIMPLE(real dt) {
+	// Question: Initial guess valid? - All zero.
 	real *vxGuess = new real[totalVX];
 	real *vyGuess = new real[totalVY];
 	real *vzGuess = new real[totalVZ];
@@ -179,6 +186,8 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 	setInitGuess(vxGuess, vyGuess, vzGuess, rhoGuess);
 	int loopcnt = 0;
 	while (true) {
+		// Question: What is boundary condition? 
+		// What are we going to do?
 		loopcnt++;
 		if (debugOutput) cout << loopcnt << "-th iteration" << endl;
 		if (loopcnt > 100) {
@@ -191,12 +200,15 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		real *vxStar = new real[totalVX];
 		real *vyStar = new real[totalVY];
 		real *vzStar = new real[totalVZ];
+		// Question on the hypothesis we have made:
+		// 1. isothermal; 2. g = 0; 3. advection = 0; 4. \theta = 0; 5. C_v = 0
 		computeVelocityStar(dt, vxGuess, vyGuess, vzGuess, rhoGuess, vxStar, vyStar, vzStar);
 		//cout << "vx' " << fieldMax(vxStar, totalVX) << endl;
 
 
 		// 2. compute rho* using the equation of state ...
 		// skipped step
+		// Question: Why skipped? Why actually needed?
 		real *rhoStar = new real[totalCells];
 		memcpy(rhoStar, rhoGuess, totalCells * sizeof(real));
 
@@ -250,9 +262,9 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 }
 
 void StaggeredGrid::addBubble() {
-	float xTotal = dx*resX;
-	float yTotal = dx*resY;
-	float zTotal = dx*resZ;
+	float xTotal = dx * resX;
+	float yTotal = dx * resY;
+	float zTotal = dx * resZ;
 
 	Vec3f bubble1 = Vec3f(0.41, 0.50, 0.50) * xTotal;// *_xRes;
 	Vec3f bubble2 = Vec3f(0.67, 0.50, 0.50) * yTotal;// *_yRes;
@@ -267,20 +279,19 @@ void StaggeredGrid::addBubble() {
 			{
 				int index = x + y * resX + z * slabSize;
 				rho[index] = 500.0f; //liquid dens
-				
+
+				// Grid center position
 				Vec3f gc = Vec3f(x + 0.5, y + 0.5, z + 0.5) * dx;
 
 				//bubble1
 				Vec3f dis = gc - bubble1;
-
-				if (mag2(dis)<Rb1*Rb1) {
+				if (mag2(dis) < Rb1 * Rb1) {
 					rho[index] = 0.5f;  //vapor dens
 				}
 
 				//bubble2
 				dis = gc - bubble2;
-
-				if (mag2(dis)<Rb2*Rb2) {
+				if (mag2(dis) < Rb2 * Rb2) {
 					rho[index] = 0.5f;  //vapor dens
 				}
 				totalmass += rho[index];
@@ -291,7 +302,10 @@ void StaggeredGrid::addBubble() {
 
 void StaggeredGrid::runSIMPLE() {
 	timeStep = new TimeStepController(config->totalFrame(), config->gridFPS(), config->gridDt());
-
+	
+	bool oldLoopBoundary = loopBoundary;
+	loopBoundary = false;
+	
 	addBubble();
 
 	while (!timeStep->isFinished()) {
@@ -299,19 +313,21 @@ void StaggeredGrid::runSIMPLE() {
 		int fmCnt;
 		if (timeStep->isFrameTime(fmCnt)) {
 #ifndef _DEBUG
-			dumpSlicePreview(fmCnt, rho, 50, 0.2);
+			dumpSlicePreview(fmCnt, rho, 50, 0.2f);
 #endif // !_DEBUG
 		}
 		std::cout << "This step elapsed *** seconds." << std::endl;
 	}
 	delete timeStep;
+	
+	loopBoundary = oldLoopBoundary;
 	std::cout << "Total elapsed *** seconds." << std::endl;
 }
 
 void StaggeredGrid::laplaceRhoOnAlignedGrid(real * rho, real * out_laplacianRho) {
 	// var for debugging purpose, remove when optimize.
 	bool allZero = true;
-
+	// Question: How to discretize a Laplacian?
 	for (int i = 0; i < resX; i++) {
 		for (int j = 0; j < resY; j++) {
 			for (int k = 0; k < resZ; k++) {
@@ -347,8 +363,10 @@ real StaggeredGrid::funcWd(real r) {
 		cout << "illegal value for funcWd, error 2" << endl;
 		exit(0);
 	}
+	// Question: Assuming theta = 1, and consider C_v (heat capacity @ constant volume) = 0?
+	// W'(p) = -2ap+Rln(p/b-p)+C_v+Rb/(b-p)
 	real ans = -2 * V_PA * r + V_RTM * log(r / (V_PB - r)) + V_RTM * V_PB / (r - V_PB);
-	if (ans != ans) {
+	if (ans != ans) { // NaN. && r < 0 ???
 		cout << "funcWd(): " << r << endl;
 	}
 	return ans;

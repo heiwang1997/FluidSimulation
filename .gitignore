@@ -1,0 +1,14 @@
+﻿################################################################################
+# 此 .gitignore 文件已由 Microsoft(R) Visual Studio 自动创建。
+################################################################################
+
+/Debug
+/lpng16
+/libconfig-1.3.2
+/zlib
+/x64
+/result
+/readme.txt
+/libpng16.dll
+/libiomp5md.dll
+/libconfig++.dll

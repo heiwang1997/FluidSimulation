@@ -74,6 +74,8 @@ inline void setBorderValue(real *field, int dimX, int dimY, int dimZ, real value
 	}
 }
 
+/* Modify the field: Set the six faces of a cube to be CELL_TYPE value.
+*/
 inline void setBorderType(CELL_TYPE *field, int dimX, int dimY, int dimZ, CELL_TYPE value) {
 	for (int z = 0; z < dimZ; z++) {
 		for (int y = 0; y < dimY; y++) {

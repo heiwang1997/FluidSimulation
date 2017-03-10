@@ -4,6 +4,8 @@
 #include <cmath>
 #include <iostream>
 
+typedef float real;
+
 template<class T>
 struct Tensor22
 {

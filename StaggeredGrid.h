@@ -143,8 +143,10 @@ public:
 	void computeVelocityPrime(real dt, real *vxStar, real *vyStar, real *vzStar, real *rhoStar, real *rhoPrime,
 		real *out_vxPrime, real *out_vyPrime, real *out_vzPrime);
 	/* return true if algorithm converges ( ||rho'||<tol, ||u'||<tol ) */
-	bool updateGuesses(real dt, real *io_vxGuess, real *io_vyGuess, real *io_vzGuess,
-		real *in_vxPrime, real *in_vyPrime, real *in_vzPrime, real *io_rhoGuess, real *in_rhoPrime);
+	bool updateGuesses(real * io_vxGuess, real * io_vyGuess,
+		real * io_vzGuess, real * in_vxStar, real * in_vyStar, real * in_vzStar,
+		real * in_vxPrime, real * in_vyPrime, real * in_vzPrime,
+		real * io_rhoGuess, real * in_rhoPrime);
 	void stepSIMPLE(real dt);
 	void addBubble();
 	void runSIMPLE();

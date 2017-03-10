@@ -1,4 +1,5 @@
 #include "stdafx.h"
+#include <Eigen/Sparse>
 #include "StaggeredGrid.h"
 #include "FieldManipulation.h"
 #include "config.h"
@@ -14,7 +15,14 @@ void StaggeredGrid::setInitGuess(real * out_vxGuess, real * out_vyGuess, real * 
 }
 
 
-void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess, real * vzGuess, real * rhoGuess, real * out_vxStar, real * out_vyStar, real * out_vzStar) {
+/* This function compute V* by solving the Momentum Equation.
+ * We ignore the shear tensor and gravity.
+ * The PDE is solved in a splitting manner.
+ * Du/Dt = - grad W'(\rho) + 1 / We * grad laplacian rho
+ */
+void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess, real * vzGuess, 
+	real * rhoGuess, real * out_vxStar, real * out_vyStar, real * out_vzStar) {
+	// Optimize Suggestion: 1. high-speed cache usage: loop seq.; 2. allocate once.
 	if (debugOutput) {
 		cout << "computeVelocityStar()" << endl;
 		// semilagrange u1 = advect u_n in u_guess, dt
@@ -26,55 +34,54 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 		cout << "  rhoGuess: " << fieldMax(rhoGuess, totalCells, true) << endl;
 		cout << " =====" << endl;
 	}
+	// First Step:
+	// Solve: Du/Dt = 0
 	advectVelocitySemiLagrange(dt, vxGuess, vyGuess, vzGuess, velocityX, velocityY, velocityZ, out_vxStar, out_vyStar, out_vzStar);
-	// if (debugOutput) cout << "  vxStar after advection: " << fieldMax(out_vxStar, totalVX) << endl;
-	// eular step u* = u1 + f(rho_guess) * dt
+
+	// Second Step:
+	// Euler forward u* = u1 + f(rho_guess) * dt
 	real *laplaceRho = new real[totalCells];
-	//if (debugOutput) cout << "  rho: " << fieldMax(rho, totalCells, true) << endl;
-	laplaceRhoOnAlignedGrid(rho, laplaceRho);
-	//if (debugOutput) cout << "  laplaceRho: " << fieldMax(laplaceRho, totalCells) << endl;
-	// W'(rho)
-	real *WdRho = new real[totalCells];
-	for (int i = 0; i < totalCells; i++) {
-		WdRho[i] = funcWd(rho[i]);
+	laplaceRhoOnAlignedGrid(rhoGuess, laplaceRho);
 
-	}
-	// res+1 is copied from 0
-	if (debugOutput) cout << "  WdRho: " << fieldMax(WdRho, totalCells) << endl;
+	//real *WdRho = new real[totalCells];
+	//for (int i = 0; i < totalCells; i++) {
+	//	WdRho[i] = funcWd(rhoGuess[i]);
+	//}
 
-	// cout << "dx, dt " << dx << " " << dt << endl;
+	//if (debugOutput) cout << "  WdRho: " << fieldMax(WdRho, totalCells) << endl;
+
 	// !!! laplace rho can be very large due to the discontinuity of rho. (1)
-	// cout << "laplace rho " << fieldMax(laplaceRho, totalCells) << endl;
-	// cout << "func(rho)" << fieldMax(WdRho, totalCells) << endl;
-	// update vx
 	// !!! due to (1), v* can be very large. (2)
 
-	// Question: When discretizing, why use center-left? Why use res+1 -> 0?
-	// Also, what about boundary conditions?
+	// We employ a loop boundary, so res is compied from 0
+	// update vx
 	for (int k = 0; k < resZ; k++) {
 		for (int j = 0; j < resY; j++) {
 			for (int i = 0; i < resX; i++) {
 				int vIndex = getIndex(i, j, k, resX + 1, resY, resZ);
 				int centerRight = getIndex(i, j, k, resX, resY, resZ);
 				int centerLeft = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
-				out_vxStar[vIndex] += -(WdRho[centerRight] - WdRho[centerLeft]) / dx * dt;
+				// out_vxStar[vIndex] += -(WdRho[centerRight] - WdRho[centerLeft]) / dx * dt;
+				out_vxStar[vIndex] += -(rhoGuess[centerRight] - rhoGuess[centerLeft]) * 
+					(funcWd(0.5f * (rhoGuess[centerLeft] + rhoGuess[centerRight]))) / dx * dt;
 				out_vxStar[vIndex] += V_INVWE * (laplaceRho[centerRight] - laplaceRho[centerLeft]) / dx * dt;
 			}
-			out_vxStar[getIndex(0, j, k, resX + 1, resY, resZ)] = out_vxStar[getIndex(resX, j, k, resX + 1, resY, resZ)];
+			out_vxStar[getIndex(resX, j, k, resX + 1, resY, resZ)] = out_vxStar[getIndex(0, j, k, resX + 1, resY, resZ)];
 		}
 	}
 	// update vy
-	for (int i 
-		= 0; i < resX; i++) {
+	for (int i = 0; i < resX; i++) {
 		for (int k = 0; k < resZ; k++) {
 			for (int j = 0; j < resY; j++) {
 				int vIndex = getIndex(i, j, k, resX, resY + 1, resZ);
 				int centerAbove = getIndex(i, j, k, resX, resY, resZ);
 				int centerBelow = getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
-				out_vyStar[vIndex] += -(WdRho[centerAbove] - WdRho[centerBelow]) / dx * dt;
+				// out_vyStar[vIndex] += -(WdRho[centerAbove] - WdRho[centerBelow]) / dx * dt;
+				out_vyStar[vIndex] += -(rhoGuess[centerAbove] - rhoGuess[centerBelow]) *
+					(funcWd(0.5f * (rhoGuess[centerAbove] + rhoGuess[centerBelow]))) / dx * dt;
 				out_vyStar[vIndex] += V_INVWE * (laplaceRho[centerAbove] - laplaceRho[centerBelow]) / dx * dt;
 			}
-			out_vyStar[getIndex(i, 0, k, resX, resY + 1, resZ)] = out_vyStar[getIndex(i, resY, k, resX, resY + 1, resZ)];
+			out_vyStar[getIndex(i, resY, k, resX, resY + 1, resZ)] = out_vyStar[getIndex(i, 0, k, resX, resY + 1, resZ)];
 		}
 	}
 	// update vz
@@ -84,60 +91,187 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 				int vIndex = getIndex(i, j, k, resX, resY, resZ + 1);
 				int centerBack = getIndex(i, j, k, resX, resY, resZ);
 				int centerFront = getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
-				out_vzStar[vIndex] += -(WdRho[centerBack] - WdRho[centerFront]) / dx * dt;
+				//out_vzStar[vIndex] += -(WdRho[centerBack] - WdRho[centerFront]) / dx * dt;
+				out_vzStar[vIndex] += -(rhoGuess[centerBack] - rhoGuess[centerFront]) *
+					(funcWd(0.5f * (rhoGuess[centerBack] + rhoGuess[centerFront]))) / dx * dt;
 				out_vzStar[vIndex] += V_INVWE * (laplaceRho[centerBack] - laplaceRho[centerFront]) / dx * dt;
 			}
-			out_vzStar[getIndex(i, j, 0, resX, resY, resZ + 1)] = out_vzStar[getIndex(i, j, resZ, resX, resY, resZ + 1)];
+			out_vzStar[getIndex(i, j, resZ, resX, resY, resZ + 1)] = out_vzStar[getIndex(i, j, 0, resX, resY, resZ + 1)];
 		}
 	}
-	if (debugOutput) cout << "  out_vxStar after euler: " << fieldMax(out_vxStar, totalVX) << endl;
+	// if (debugOutput) cout << "  out_vxStar after euler: " << fieldMax(out_vxStar, totalVX) << endl;
+
+	delete[] laplaceRho;
+	// delete[] WdRho;
 }
 
-void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real * vzStar, real * rhoStar, real * out_rhoPrime) {
-	if (debugOutput) {
-		cout << "computeRhoPrime()" << endl;
-		checkFieldStatus();
-		cout << " input:" << endl;
-		cout << "  rhoStar: " << fieldMax(rhoStar, totalCells, true) << endl;
-		cout << " ======" << endl;
-	}
-	// This step utilize the Continuity Equation.
-	// here we first calculate rho' + rho*
-	// (rho' - rho) / dt + u . grad(rho) + rho * div(u) = 0
+// Rho Prime is calculated using C.E.
+// See rhoprime.docx for more info.
+void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real * vzStar, 
+	real * rhoStar, real * out_rhoPrime) {
+	typedef Eigen::SparseMatrix<real> SpMat;
+	typedef Eigen::Triplet<real> Triplet;
 
-	// !!! due to (2), v* can have very large value. (3)
-	if (debugOutput) cout << "  rho (that is advected): " << fieldMax(rho, totalCells, true) << endl;
-	advectFieldSemiLagrange(dt, vxStar, vyStar, vzStar, rho, out_rhoPrime, true);
-	if (debugOutput) cout << "  out_rhoPrime (after advection): " << fieldMax(out_rhoPrime, totalCells, true) << endl;
-	for (int i = 0; i < resX; i++) {
-		for (int j = 0; j < resY; j++) {
-			for (int k = 0; k < resZ; k++) {
-				int index = getIndex(i, j, k, resX, resY, resZ);
+	std::vector<Triplet> coefficients;
+	coefficients.reserve(totalCells * 7);
+
+	Eigen::VectorXf b(totalCells);
+
+	if (debugOutput) cout << "Start building sparse matrix for rho' " << totalCells << endl;
+
+	for (int k = 0; k < resZ; ++k) {
+		for (int j = 0; j < resY; ++j) {
+			for (int i = 0; i < resX; ++i) {
+				int center = getIndex(i, j, k, resX, resY, resZ);
+				int left = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
+				int right = getIndex((i + 1) % resX, j, k, resX, resY, resZ);
+				int up = getIndex(i, (j + 1) % resY, k, resX, resY, resZ);
+				int bottom = getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
+				int front = getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
+				int back = getIndex(i, j, (k + 1) % resZ, resX, resY, resZ);
 				real vRight = vxStar[getIndex(i + 1, j, k, resX + 1, resY, resZ)];
 				real vLeft = vxStar[getIndex(i, j, k, resX + 1, resY, resZ)];
 				real vTop = vyStar[getIndex(i, j + 1, k, resX, resY + 1, resZ)];
 				real vBottom = vyStar[getIndex(i, j, k, resX, resY + 1, resZ)];
 				real vBack = vzStar[getIndex(i, j, k + 1, resX, resY, resZ + 1)];
 				real vFront = vzStar[getIndex(i, j, k, resX, resY, resZ + 1)];
-				real divergence = (vRight - vLeft + vTop - vBottom + vBack - vFront) / dx;
-				// eular: Question: Why divide equal instead of multiply equal?
-				// Will it converge?
-				out_rhoPrime[index] /= (1 + divergence * dt);
+
+				coefficients.push_back(Triplet(center, center, 2 * dx / dt + vRight - vLeft + vTop - vBottom + vBack - vFront));
+				coefficients.push_back(Triplet(center, right, vRight));
+				coefficients.push_back(Triplet(center, left, -vLeft));
+				coefficients.push_back(Triplet(center, up, vTop));
+				coefficients.push_back(Triplet(center, bottom, -vBottom));
+				coefficients.push_back(Triplet(center, back, vBack));
+				coefficients.push_back(Triplet(center, front, -vFront));
+
+				real rhs = -((rhoStar[center] + rhoStar[right]) * vRight
+					- (rhoStar[center] + rhoStar[left]) * vLeft
+					+ (rhoStar[center] + rhoStar[up]) * vTop
+					- (rhoStar[center] + rhoStar[bottom]) * vBottom
+					+ (rhoStar[center] + rhoStar[back]) * vBack
+					- (rhoStar[center] + rhoStar[front]) * vFront
+					+ 2 * dx / dt * (rhoStar[center] - rho[center]));
+				// Should be equivalent to (b << rhs;)
+				b[center] = rhs;
 			}
 		}
 	}
-	if (debugOutput) cout << "  out_rhoPrime (after eular): " << fieldMax(out_rhoPrime, totalCells, true) << endl;
-	for (int i = 0; i < totalCells; i++) {
-		out_rhoPrime[i] -= rhoStar[i];
+
+	SpMat A(totalCells, totalCells);
+	A.setFromTriplets(coefficients.begin(), coefficients.end());
+
+	if (debugOutput) cout << "Start solving for rho'" << A.nonZeros() << endl;
+	// Eigen::ConjugateGradient;
+	// Eigen::LeastSquaresConjugateGradient;
+	Eigen::BiCGSTAB<SpMat, Eigen::IncompleteLUT<real> > solver;
+	solver.compute(A);
+	Eigen::VectorXf x = solver.solve(b);
+	if (solver.info() != Eigen::Success) {
+		if (debugOutput) cout << "Solver Failed." << endl;
+		exit(0);
 	}
-	if (debugOutput) cout << "  out_rhoPrime (after subtraction): " << fieldMax(out_rhoPrime, totalCells, true) << endl;
+	if (debugOutput) cout << "Solve complete" << endl;
+	cout << x << endl;
+	memcpy(out_rhoPrime, x.data(), sizeof(real) * totalCells);
 }
 
-void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, real * vzStar, real * rhoStar, real * rhoPrime, real * out_vxPrime, real * out_vyPrime, real * out_vzPrime) {
-	return;
+/* This function compute V' using rho* and rho'
+ * The intuition behind this is that M.E. needs to be enhanced.
+ * See vprime.docx for more info.
+ */
+void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, real * vzStar,
+	real * rhoStar, real * rhoPrime, real * out_vxPrime, real * out_vyPrime, real * out_vzPrime) {
+	
+	real* rhoStarStar = new real[totalCells];
+	for (int i = 0; i < totalCells; ++i) {
+		rhoStarStar[i] = rhoStar[i] + rhoPrime[i];
+		if (rhoStar[i] == 0) {
+			cout << "rhoStar" << endl;
+		}
+		if (rhoStarStar[i] == 0) {
+			cout << "rhoStarStar" << endl;
+		}
+	}
+	real *laplaceRhoStarStar = new real[totalCells];
+	laplaceRhoOnAlignedGrid(rhoStarStar, laplaceRhoStarStar);
+	real *laplaceRhoStar = new real[totalCells];
+	laplaceRhoOnAlignedGrid(rhoStar, laplaceRhoStar);
+
+	//real *WdRho = new real[totalCells];
+	//for (int i = 0; i < totalCells; i++) {
+	//	WdRho[i] = funcWd(rho[i]);
+	//}
+
+	// We employ a loop boundary, so res is compied from 0
+	// update vx
+	for (int k = 0; k < resZ; k++) {
+		for (int j = 0; j < resY; j++) {
+			for (int i = 0; i < resX; i++) {
+				int vIndex = getIndex(i, j, k, resX + 1, resY, resZ);
+				int centerRight = getIndex(i, j, k, resX, resY, resZ);
+				int centerLeft = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
+
+				out_vxPrime[vIndex] += -(rhoStarStar[centerRight] - rhoStarStar[centerLeft]) *
+					(funcWd(0.5f * (rhoStarStar[centerLeft] + rhoStarStar[centerRight]))) / dx * dt;
+				out_vxPrime[vIndex] += V_INVWE * (laplaceRhoStarStar[centerRight] - laplaceRhoStarStar[centerLeft]) / dx * dt;
+
+				out_vxPrime[vIndex] -= -(rhoStar[centerRight] - rhoStar[centerLeft]) *
+					(funcWd(0.5f * (rhoStar[centerLeft] + rhoStar[centerRight]))) / dx * dt;
+				out_vxPrime[vIndex] -= V_INVWE * (laplaceRhoStar[centerRight] - laplaceRhoStar[centerLeft]) / dx * dt;
+			}
+			out_vxPrime[getIndex(resX, j, k, resX + 1, resY, resZ)] = out_vxPrime[getIndex(0, j, k, resX + 1, resY, resZ)];
+		}
+	}
+	// update vy
+	for (int i = 0; i < resX; i++) {
+		for (int k = 0; k < resZ; k++) {
+			for (int j = 0; j < resY; j++) {
+				int vIndex = getIndex(i, j, k, resX, resY + 1, resZ);
+				int centerAbove = getIndex(i, j, k, resX, resY, resZ);
+				int centerBelow = getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
+
+				out_vyPrime[vIndex] += -(rhoStarStar[centerAbove] - rhoStarStar[centerBelow]) *
+					(funcWd(0.5f * (rhoStarStar[centerAbove] + rhoStarStar[centerBelow]))) / dx * dt;
+				out_vyPrime[vIndex] += V_INVWE * (laplaceRhoStarStar[centerAbove] - laplaceRhoStarStar[centerBelow]) / dx * dt;
+
+				out_vyPrime[vIndex] -= -(rhoStar[centerAbove] - rhoStar[centerBelow]) *
+					(funcWd(0.5f * (rhoStar[centerAbove] + rhoStar[centerBelow]))) / dx * dt;
+				out_vyPrime[vIndex] -= V_INVWE * (laplaceRhoStar[centerAbove] - laplaceRhoStar[centerBelow]) / dx * dt;
+			}
+			out_vyPrime[getIndex(i, resY, k, resX, resY + 1, resZ)] = out_vyPrime[getIndex(i, 0, k, resX, resY + 1, resZ)];
+		}
+	}
+	// update vz
+	for (int i = 0; i < resX; i++) {
+		for (int j = 0; j < resY; j++) {
+			for (int k = 0; k < resZ; k++) {
+				int vIndex = getIndex(i, j, k, resX, resY, resZ + 1);
+				int centerBack = getIndex(i, j, k, resX, resY, resZ);
+				int centerFront = getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
+
+				out_vzPrime[vIndex] += -(rhoStarStar[centerBack] - rhoStarStar[centerFront]) *
+					(funcWd(0.5f * (rhoStarStar[centerBack] + rhoStarStar[centerFront]))) / dx * dt;
+				out_vzPrime[vIndex] += V_INVWE * (laplaceRhoStarStar[centerBack] - laplaceRhoStarStar[centerFront]) / dx * dt;
+
+				out_vzPrime[vIndex] -= -(rhoStar[centerBack] - rhoStar[centerFront]) *
+					(funcWd(0.5f * (rhoStar[centerBack] + rhoStar[centerFront]))) / dx * dt;
+				out_vzPrime[vIndex] -= V_INVWE * (laplaceRhoStar[centerBack] - laplaceRhoStar[centerFront]) / dx * dt;
+			}
+			out_vzPrime[getIndex(i, j, resZ, resX, resY, resZ + 1)] = out_vzPrime[getIndex(i, j, 0, resX, resY, resZ + 1)];
+		}
+	}
+
+	delete[] rhoStarStar;
+	delete[] laplaceRhoStarStar;
+	delete[] laplaceRhoStar;
+
 }
 
-bool StaggeredGrid::updateGuesses(real dt, real * io_vxGuess, real * io_vyGuess, real * io_vzGuess, real * in_vxPrime, real * in_vyPrime, real * in_vzPrime, real * io_rhoGuess, real * in_rhoPrime) {
+// I wonder why writing in C is like writing verilog... inout wire[31:0] io_vxGuess
+bool StaggeredGrid::updateGuesses(real * io_vxGuess, real * io_vyGuess, 
+	real * io_vzGuess, real * in_vxStar, real * in_vyStar, real * in_vzStar,
+	real * in_vxPrime, real * in_vyPrime, real * in_vzPrime, 
+	real * io_rhoGuess, real * in_rhoPrime) {
 	if (debugOutput) {
 		cout << "updateGuesses()" << endl;
 		checkFieldStatus();
@@ -147,27 +281,34 @@ bool StaggeredGrid::updateGuesses(real dt, real * io_vxGuess, real * io_vyGuess,
 		cout << "  i_rhoGuess: " << fieldMax(io_rhoGuess, totalCells, true) << endl;
 		cout << " =======" << endl;
 	}
-	// Question: Why here is 0? Actually, why there is lambda_u and lambda_rho?
-	real lambda_u = 0.0, lambda_rho = 1.0;
+
+	static const real lambda_rho = 1.0;
+	static const real eps = 1e-6;
+
 	double squaredNormVPrime = 0.0, squaredNormRhoPrime = 0.0;
 	for (int i = 0; i < totalVX; i++) {
-		io_vxGuess[i] += lambda_u * in_vxPrime[i];
-		squaredNormVPrime += in_vxPrime[i] * in_vxPrime[i];
+		real finalVx = in_vxStar[i] + in_vxPrime[i];
+		real vxDelta = finalVx - io_vxGuess[i];
+		io_vxGuess[i] = finalVx;
+		squaredNormVPrime += vxDelta * vxDelta;
 	}
 	for (int i = 0; i < totalVY; i++) {
-		io_vyGuess[i] += lambda_u * in_vyPrime[i];
-		squaredNormVPrime += in_vyPrime[i] * in_vyPrime[i];
+		real finalVy = in_vyStar[i] + in_vyPrime[i];
+		real vyDelta = finalVy - io_vyGuess[i];
+		io_vyGuess[i] = finalVy;
+		squaredNormVPrime += vyDelta * vyDelta;
 	}
 	for (int i = 0; i < totalVZ; i++) {
-		io_vzGuess[i] += lambda_u * in_vzPrime[i];
-		squaredNormVPrime += in_vzPrime[i] * in_vzPrime[i];
+		real finalVz = in_vzStar[i] + in_vzPrime[i];
+		real vzDelta = finalVz - io_vzGuess[i];
+		io_vzGuess[i] = finalVz;
+		squaredNormVPrime += vzDelta * vzDelta;
 	}
 	for (int i = 0; i < totalCells; i++) {
-		io_rhoGuess[i] += lambda_rho * in_rhoPrime[i];
+		io_rhoGuess[i] += in_rhoPrime[i];
 		squaredNormRhoPrime += in_rhoPrime[i] * in_rhoPrime[i];
 	}
-	real tol = 1e-8;
-	if (squaredNormRhoPrime < tol && squaredNormVPrime < tol) { // norm(rho')^2 < tol
+	if (squaredNormRhoPrime < eps && squaredNormVPrime < eps) {
 		return true;
 	}
 	else {
@@ -176,18 +317,16 @@ bool StaggeredGrid::updateGuesses(real dt, real * io_vxGuess, real * io_vyGuess,
 }
 
 void StaggeredGrid::stepSIMPLE(real dt) {
-	// Question: Initial guess valid? - All zero.
 	real *vxGuess = new real[totalVX];
 	real *vyGuess = new real[totalVY];
 	real *vzGuess = new real[totalVZ];
 	real *rhoGuess = new real[totalCells];
 	if (debugOutput) cout << "set initial guess" << endl;
-	checkFieldStatus(true);
+	// checkFieldStatus(true);
 	setInitGuess(vxGuess, vyGuess, vzGuess, rhoGuess);
+
 	int loopcnt = 0;
 	while (true) {
-		// Question: What is boundary condition? 
-		// What are we going to do?
 		loopcnt++;
 		if (debugOutput) cout << loopcnt << "-th iteration" << endl;
 		if (loopcnt > 100) {
@@ -196,41 +335,31 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		}
 
 		// 1. assemble and solve momentum equation for v*
-		// cout << "compute v*" << endl;
 		real *vxStar = new real[totalVX];
 		real *vyStar = new real[totalVY];
 		real *vzStar = new real[totalVZ];
-		// Question on the hypothesis we have made:
-		// 1. isothermal; 2. g = 0; 3. advection = 0; 4. \theta = 0; 5. C_v = 0
 		computeVelocityStar(dt, vxGuess, vyGuess, vzGuess, rhoGuess, vxStar, vyStar, vzStar);
-		//cout << "vx' " << fieldMax(vxStar, totalVX) << endl;
 
-
-		// 2. compute rho* using the equation of state ...
-		// skipped step
-		// Question: Why skipped? Why actually needed?
-		real *rhoStar = new real[totalCells];
-		memcpy(rhoStar, rhoGuess, totalCells * sizeof(real));
+		// 2. compute rho* using the equation of state - skipped.
+		// real *rhoStar = new real[totalCells];
+		// memcpy(rhoStar, rhoGuess, totalCells * sizeof(real));
+		real* rhoStar = rhoGuess;
 
 		// 3. assemble and solve *continuity equation for rho'
-		// cout << "compute rho'" << endl;
 		real *rhoPrime = new real[totalCells];
 		computeRhoPrime(dt, vxStar, vyStar, vzStar, rhoStar, rhoPrime);
 
-		// 4. skipped step
+		// 4. Compute v prime.
 		// cout << "compute v'" << endl;
 		real *vxPrime = new real[totalVX];
 		real *vyPrime = new real[totalVY];
 		real *vzPrime = new real[totalVZ];
 		computeVelocityPrime(dt, vxStar, vyStar, vzStar, rhoStar, rhoPrime, vxPrime, vyPrime, vzPrime);
 
-		memcpy(vxGuess, vxStar, totalVX * sizeof(real));
-		memcpy(vyGuess, vyStar, totalVY * sizeof(real));
-		memcpy(vzGuess, vzStar, totalVZ * sizeof(real));
-
 		// cout << "update guess" << endl;
-		bool converged = updateGuesses(dt, vxGuess, vyGuess, vzGuess, vxPrime, vyPrime, vzPrime, rhoGuess, rhoPrime);
-		delete[] rhoStar;
+		bool converged = updateGuesses(vxGuess, vyGuess, vzGuess,
+			vxStar, vyStar, vzStar, vxPrime, vyPrime, vzPrime, rhoGuess, rhoPrime);
+		// delete[] rhoStar;
 		delete[] vxStar;
 		delete[] vyStar;
 		delete[] vzStar;
@@ -363,9 +492,11 @@ real StaggeredGrid::funcWd(real r) {
 		cout << "illegal value for funcWd, error 2" << endl;
 		exit(0);
 	}
-	// Question: Assuming theta = 1, and consider C_v (heat capacity @ constant volume) = 0?
-	// W'(p) = -2ap+Rln(p/b-p)+C_v+Rb/(b-p)
-	real ans = -2 * V_PA * r + V_RTM * log(r / (V_PB - r)) + V_RTM * V_PB / (r - V_PB);
+	static const real theta = 1.0f;
+
+	//real ans = -2 * V_PA * r + V_RTM * log(r / (V_PB - r)) + V_RTM * V_PB / (r - V_PB);
+	real ans = -2 * V_PA + (V_PB * V_PB * V_RTM * theta) / (r * (V_PB - r) * (V_PB - r));
+	
 	if (ans != ans) { // NaN. && r < 0 ???
 		cout << "funcWd(): " << r << endl;
 	}

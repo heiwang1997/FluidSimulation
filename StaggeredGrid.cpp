@@ -855,7 +855,7 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 advices on making moving walls:
 	add member vars to StaggeredGrid to track each boundary;
 	use the vars to change the bounary of FOR loop;
-	modify the divergence term. Question: What does this algorithm called? Will this get rho field?
+	modify the divergence term.
 */
 void StaggeredGrid::project() {
 

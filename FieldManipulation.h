@@ -17,11 +17,12 @@ inline int loopIndex(int pos, int dim) {
 }
 
 inline real fieldMax(real *f, int l, bool checkZero = false) {
-	real max = 0;
+	real max = -1e30;
 	bool zero = false, allZero = true;
+	int max_id = -1;
 	for (int i = 0; i < l; i++) {
 		if (f[i] != f[i]) {
-			std::cout << "INF" << std::endl; 
+			std::cout << "NAN" << std::endl; 
 			exit(0);
 		}
 		if (f[i] == 0) {
@@ -32,6 +33,7 @@ inline real fieldMax(real *f, int l, bool checkZero = false) {
 		}
 		if (f[i] * f[i] > max) {
 			max = f[i] * f[i];
+			max_id = i;
 		}
 	}
 	if (zero && checkZero) {
@@ -40,6 +42,7 @@ inline real fieldMax(real *f, int l, bool checkZero = false) {
 	if (allZero && checkZero) {
 		std::cout << "all zero field."<< std::endl;
 	}
+	std::cout << "(max_id" << max_id << ")";
 	return max;
 }
 

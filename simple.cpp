@@ -36,7 +36,12 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 	}
 	// First Step:
 	// Solve: Du/Dt = 0
-	advectVelocitySemiLagrange(dt, vxGuess, vyGuess, vzGuess, velocityX, velocityY, velocityZ, out_vxStar, out_vyStar, out_vzStar);
+	advectVelocitySemiLagrange(dt, vxGuess, vyGuess, vzGuess, 
+		/* velocityX, velocityY, velocityZ, */
+		out_vxStar, out_vyStar, out_vzStar);
+
+	cout << "----------- After Advection.-------------------" << endl;
+	cout << "  out_vxStar: " << fieldMax(out_vxStar, totalVX) << endl;
 
 	// Second Step:
 	// Euler forward u* = u1 + f(rho_guess) * dt
@@ -99,7 +104,7 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 			out_vzStar[getIndex(i, j, resZ, resX, resY, resZ + 1)] = out_vzStar[getIndex(i, j, 0, resX, resY, resZ + 1)];
 		}
 	}
-	// if (debugOutput) cout << "  out_vxStar after euler: " << fieldMax(out_vxStar, totalVX) << endl;
+	if (debugOutput) cout << "  out_vxStar after euler: " << fieldMax(out_vxStar, totalVX) << endl;
 
 	delete[] laplaceRho;
 	// delete[] WdRho;
@@ -164,17 +169,27 @@ void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real 
 	// Eigen::ConjugateGradient;
 	// Eigen::LeastSquaresConjugateGradient;
 	Eigen::BiCGSTAB<SpMat, Eigen::IncompleteLUT<real> > solver;
+	Eigen::VectorXf x;
 	solver.compute(A);
-	Eigen::VectorXf x = solver.solve(b);
+	x = solver.solve(b);
 	if (solver.info() != Eigen::Success) {
 		if (debugOutput) cout << "Solver Failed." << endl;
 		exit(0);
 	}
+	
 	if (debugOutput) cout << "Solve complete" << endl;
-	cout << x << endl;
 	memcpy(out_rhoPrime, x.data(), sizeof(real) * totalCells);
 }
 
+void checkFuncWrong(real* arr, int pos1, int pos2) {
+	if (arr[pos1] + arr[pos2] == 0) {
+		cout << "Check point matched!" << endl;
+		cout << arr[pos1] << ' ' << arr[pos2] << endl;
+		cout << pos1 << ' ' << pos2 << endl;
+		cout << endl;
+	}
+}
+ 
 /* This function compute V' using rho* and rho'
  * The intuition behind this is that M.E. needs to be enhanced.
  * See vprime.docx for more info.
@@ -197,11 +212,6 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 	real *laplaceRhoStar = new real[totalCells];
 	laplaceRhoOnAlignedGrid(rhoStar, laplaceRhoStar);
 
-	//real *WdRho = new real[totalCells];
-	//for (int i = 0; i < totalCells; i++) {
-	//	WdRho[i] = funcWd(rho[i]);
-	//}
-
 	// We employ a loop boundary, so res is compied from 0
 	// update vx
 	for (int k = 0; k < resZ; k++) {
@@ -210,6 +220,9 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 				int vIndex = getIndex(i, j, k, resX + 1, resY, resZ);
 				int centerRight = getIndex(i, j, k, resX, resY, resZ);
 				int centerLeft = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
+
+				checkFuncWrong(rhoStarStar, centerLeft, centerRight);
+				checkFuncWrong(rhoStar, centerLeft, centerRight);
 
 				out_vxPrime[vIndex] += -(rhoStarStar[centerRight] - rhoStarStar[centerLeft]) *
 					(funcWd(0.5f * (rhoStarStar[centerLeft] + rhoStarStar[centerRight]))) / dx * dt;
@@ -433,7 +446,7 @@ void StaggeredGrid::runSIMPLE() {
 	timeStep = new TimeStepController(config->totalFrame(), config->gridFPS(), config->gridDt());
 	
 	bool oldLoopBoundary = loopBoundary;
-	loopBoundary = false;
+	loopBoundary = true;
 	
 	addBubble();
 

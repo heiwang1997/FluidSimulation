@@ -589,9 +589,9 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 	int border = loopBoundary ? 0 : 1;
 	for (int z = border; z < resZ - border; z++) {
 		for (int y = border; y < resY - border; y++) {
-			for (int x = border + 1; x < resX - border; x++) {
+			for (int x = border * 2; x < resX - border; x++) {
 				int index = getIndex(x, y, z, resX + 1, resY, resZ);
-				float velx = vxBackground[index];
+				float velx = vxBackground[index]; 
 				float vely = (
 					vyBackground[getIndex(x - 1, y, z, resX, resY + 1, resZ)] +
 					vyBackground[getIndex(x - 1, y + 1, z, resX, resY + 1, resZ)] +
@@ -617,9 +617,9 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 					if (zTrace < 0.5f) zTrace = 0.5f;
 					if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
 				}
-				else {
-					assert(false);
-				}
+				//else {
+				//	assert(false);
+				//}
 #ifndef IFLOOR
 				// locate neighbors to interpolate
 				const int x0 = (int)xTrace;
@@ -680,7 +680,7 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 	}
 	// velocity Y
 	for (int z = border; z < resZ - border; z++) {
-		for (int y = 2; y < resY - border; y++) {
+		for (int y = border * 2; y < resY - border; y++) {
 			for (int x = border; x < resX - border; x++) {
 				int index = getIndex(x, y, z, resX, resY + 1, resZ);
 				float velx = (
@@ -763,7 +763,7 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 		}
 	}
 	// velocity Z
-	for (int z = border + 1; z < resZ - border; z++) {
+	for (int z = border * 2; z < resZ - border; z++) {
 		for (int y = border; y < resY - border; y++) {
 			for (int x = border; x < resX - border; x++) {
 				int index = getIndex(x, y, z, resX, resY, resZ + 1);

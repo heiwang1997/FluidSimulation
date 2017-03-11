@@ -593,15 +593,15 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				int index = getIndex(x, y, z, resX + 1, resY, resZ);
 				float velx = vxBackground[index]; 
 				float vely = (
-					vyBackground[getIndex(x - 1, y, z, resX, resY + 1, resZ)] +
-					vyBackground[getIndex(x - 1, y + 1, z, resX, resY + 1, resZ)] +
+					vyBackground[getIndex((x - 1 + resX) % resX, y, z, resX, resY + 1, resZ)] +
+					vyBackground[getIndex((x - 1 + resX) % resX, y + 1, z, resX, resY + 1, resZ)] +
 					vyBackground[getIndex(x, y, z, resX, resY + 1, resZ)] +
 					vyBackground[getIndex(x, y + 1, z, resX, resY + 1, resZ)])*0.25f;
 				float velz = (
 					vzBackground[getIndex(x, y, z, resX, resY, resZ + 1)] +
-					vzBackground[getIndex(x - 1, y, z, resX, resY, resZ + 1)] +
+					vzBackground[getIndex((x - 1 + resX) % resX, y, z, resX, resY, resZ + 1)] +
 					vzBackground[getIndex(x, y, z + 1, resX, resY, resZ + 1)] +
-					vzBackground[getIndex(x - 1, y, z + 1, resX, resY, resZ + 1)])*0.25f;
+					vzBackground[getIndex((x - 1 + resX) % resX, y, z + 1, resX, resY, resZ + 1)])*0.25f;
 
 				// backtrace
 				float xTrace = x - dt * velx;
@@ -684,16 +684,16 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 			for (int x = border; x < resX - border; x++) {
 				int index = getIndex(x, y, z, resX, resY + 1, resZ);
 				float velx = (
-					vxBackground[getIndex(x, y - 1, z, resX + 1, resY, resZ)] +
+					vxBackground[getIndex(x, (y - 1 + resY) % resY, z, resX + 1, resY, resZ)] +
 					vxBackground[getIndex(x, y, z, resX + 1, resY, resZ)] +
-					vxBackground[getIndex(x + 1, y - 1, z, resX + 1, resY, resZ)] +
+					vxBackground[getIndex(x + 1, (y - 1 + resY) % resY, z, resX + 1, resY, resZ)] +
 					vxBackground[getIndex(x + 1, y, z, resX + 1, resY, resZ)])*0.25f;
 				float vely = vyBackground[index];
 				float velz = (
 					vzBackground[getIndex(x, y, z, resX, resY, resZ + 1)] +
 					vzBackground[getIndex(x, y, z + 1, resX, resY, resZ + 1)] +
-					vzBackground[getIndex(x, y - 1, z, resX, resY, resZ + 1)] +
-					vzBackground[getIndex(x, y - 1, z + 1, resX, resY, resZ + 1)]) * 0.25f;
+					vzBackground[getIndex(x, (y - 1 + resY) % resY, z, resX, resY, resZ + 1)] +
+					vzBackground[getIndex(x, (y - 1 + resY) % resY, z + 1, resX, resY, resZ + 1)]) * 0.25f;
 
 				// backtrace
 				float xTrace = x - dt * velx;
@@ -768,13 +768,13 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 			for (int x = border; x < resX - border; x++) {
 				int index = getIndex(x, y, z, resX, resY, resZ + 1);
 				real velx = (
-					vxBackground[getIndex(x, y, z - 1, resX + 1, resY, resZ)] +
+					vxBackground[getIndex(x, y, (z - 1 + resZ) % resZ, resX + 1, resY, resZ)] +
 					vxBackground[getIndex(x, y, z, resX + 1, resY, resZ)] +
-					vxBackground[getIndex(x + 1, y, z - 1, resX + 1, resY, resZ)] +
+					vxBackground[getIndex(x + 1, y, (z - 1 + resZ) % resZ, resX + 1, resY, resZ)] +
 					vxBackground[getIndex(x + 1, y, z, resX + 1, resY, resZ)]) *0.25f;
 				real vely = (
-					vyBackground[getIndex(x, y, z - 1, resX, resY + 1, resZ)] +
-					vyBackground[getIndex(x, y + 1, z - 1, resX, resY + 1, resZ)] +
+					vyBackground[getIndex(x, y, (z - 1 + resZ) % resZ, resX, resY + 1, resZ)] +
+					vyBackground[getIndex(x, y + 1, (z - 1 + resZ) % resZ, resX, resY + 1, resZ)] +
 					vyBackground[getIndex(x, y, z, resX, resY + 1, resZ)] +
 					vyBackground[getIndex(x, y + 1, z, resX, resY + 1, resZ)]) * 0.25f;
 				real velz = vzBackground[index];

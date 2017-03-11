@@ -3,6 +3,7 @@
 #include <string>
 #include <iostream>
 
+// Round down. -1.2 -> -2; 1.3 -> 1;
 inline int ifloor(real x) {
 	return (x > 0) ? (int)x : (int)x - 1;
 }
@@ -42,7 +43,7 @@ inline real fieldMax(real *f, int l, bool checkZero = false) {
 	if (allZero && checkZero) {
 		std::cout << "all zero field."<< std::endl;
 	}
-	std::cout << "(max_id" << max_id << ")";
+	//std::cout << "(max_id" << max_id << ")";
 	return max;
 }
 

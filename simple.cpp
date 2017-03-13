@@ -24,12 +24,11 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 	real * rhoGuess, real * out_vxStar, real * out_vyStar, real * out_vzStar) {
 	// Optimize Suggestion: 1. high-speed cache usage: loop seq.; 2. allocate once.
 	if (debugOutput) {
-		cout << "computeVelocityStar()" << endl;
+		cout << "++ computeVelocityStar()" << endl;
 		// semilagrange u1 = advect u_n in u_guess, dt
-		checkFieldStatus();
+		// checkFieldStatus();
 		cout << " input:" << endl;
 		cout << "  vxguess: " << fieldMax(vxGuess, totalVX) << endl;
-		cout << "  out_vxStar: " << fieldMax(out_vxStar, totalVX) << endl;
 		cout << "  v " << fieldMax(velocityX, totalVX) << endl;
 		cout << "  rhoGuess: " << fieldMax(rhoGuess, totalCells, true) << endl;
 		cout << " =====" << endl;
@@ -37,11 +36,11 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 	// First Step:
 	// Solve: Du/Dt = 0
 	advectVelocitySemiLagrange(dt, vxGuess, vyGuess, vzGuess, 
-		/* velocityX, velocityY, velocityZ, */
+		velocityX, velocityY, velocityZ,
 		out_vxStar, out_vyStar, out_vzStar);
 
-	cout << "----------- After Advection.-------------------" << endl;
-	cout << "  out_vxStar: " << fieldMax(out_vxStar, totalVX) << endl;
+	//cout << "----------- After Advection.-------------------" << endl;
+	//cout << "  out_vxStar: " << fieldMax(out_vxStar, totalVX) << endl;
 
 	// Second Step:
 	// Euler forward u* = u1 + f(rho_guess) * dt
@@ -110,6 +109,17 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 	// delete[] WdRho;
 }
 
+void printSlicePreview(real* arr, int resX, int resY, int resZ, int z) {
+	cout << "Slice Preview of slab " << z << endl;
+	for (int i = 0; i < resX; ++i) {
+		for (int j = 0; j < resY; ++j) {
+			cout << arr[getIndex(i, j, z, resX, resY, resZ)] << '\t';
+		}
+		cout << endl << endl << endl;
+	}
+	cout << "End of dump" << endl;
+}
+
 // Rho Prime is calculated using C.E.
 // See rhoprime.docx for more info.
 void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real * vzStar, 
@@ -117,12 +127,20 @@ void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real 
 	typedef Eigen::SparseMatrix<real> SpMat;
 	typedef Eigen::Triplet<real> Triplet;
 
+	if (debugOutput) {
+		cout << "++ computeRhoPrime()" << endl;
+		// semilagrange u1 = advect u_n in u_guess, dt
+		// checkFieldStatus();
+		cout << " input:" << endl;
+		cout << "  vxStar: " << fieldMax(vxStar, totalVX) << endl;
+		cout << "  rhoStar " << fieldMax(rhoStar, totalCells, true) << endl;
+		cout << " =====" << endl;
+	}
+
 	std::vector<Triplet> coefficients;
 	coefficients.reserve(totalCells * 7);
 
 	Eigen::VectorXf b(totalCells);
-
-	if (debugOutput) cout << "Start building sparse matrix for rho' " << totalCells << endl;
 
 	for (int k = 0; k < resZ; ++k) {
 		for (int j = 0; j < resY; ++j) {
@@ -165,7 +183,6 @@ void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real 
 	SpMat A(totalCells, totalCells);
 	A.setFromTriplets(coefficients.begin(), coefficients.end());
 
-	if (debugOutput) cout << "Start solving for rho'" << A.nonZeros() << endl;
 	// Eigen::ConjugateGradient;
 	// Eigen::LeastSquaresConjugateGradient;
 	Eigen::BiCGSTAB<SpMat, Eigen::IncompleteLUT<real> > solver;
@@ -176,9 +193,15 @@ void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real 
 		if (debugOutput) cout << "Solver Failed." << endl;
 		exit(0);
 	}
-	
-	if (debugOutput) cout << "Solve complete" << endl;
+
 	memcpy(out_rhoPrime, x.data(), sizeof(real) * totalCells);
+
+	if (debugOutput) {
+		cout << " output:" << endl;
+		//cout << "  vxStar: " << fieldMax(vxStar, totalVX) << endl;
+		cout << "  rhoPrime " << fieldMax(out_rhoPrime, totalCells, true) << endl;
+		printSlicePreview(out_rhoPrime, resX, resY, resZ, resZ / 2);
+	}
 }
 
 void checkFuncWrong(real* arr, int pos1, int pos2) {
@@ -318,7 +341,7 @@ bool StaggeredGrid::updateGuesses(real * io_vxGuess, real * io_vyGuess,
 		squaredNormVPrime += vzDelta * vzDelta;
 	}
 	for (int i = 0; i < totalCells; i++) {
-		io_rhoGuess[i] += in_rhoPrime[i];
+		io_rhoGuess[i] += lambda_rho * in_rhoPrime[i];
 		squaredNormRhoPrime += in_rhoPrime[i] * in_rhoPrime[i];
 	}
 	if (squaredNormRhoPrime < eps && squaredNormVPrime < eps) {

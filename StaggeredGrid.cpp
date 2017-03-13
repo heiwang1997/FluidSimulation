@@ -589,7 +589,9 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 	int border = loopBoundary ? 0 : 1;
 	for (int z = border; z < resZ - border; z++) {
 		for (int y = border; y < resY - border; y++) {
-			for (int x = border * 2; x < resX - border; x++) {
+			// Loop boundary -> border = 0 (0 -> resX + 1)
+			// Not  boundaty -> border = 1 (2 -> resX - 1)
+			for (int x = border * 2; x < resX + 1 - border * 2; x++) {
 				int index = getIndex(x, y, z, resX + 1, resY, resZ);
 				float velx = vxBackground[index]; 
 				float vely = (
@@ -680,7 +682,7 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 	}
 	// velocity Y
 	for (int z = border; z < resZ - border; z++) {
-		for (int y = border * 2; y < resY - border; y++) {
+		for (int y = border * 2; y < resY + 1 - border * 2; y++) {
 			for (int x = border; x < resX - border; x++) {
 				int index = getIndex(x, y, z, resX, resY + 1, resZ);
 				float velx = (
@@ -763,7 +765,7 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 		}
 	}
 	// velocity Z
-	for (int z = border * 2; z < resZ - border; z++) {
+	for (int z = border * 2; z < resZ + 1 - border * 2; z++) {
 		for (int y = border; y < resY - border; y++) {
 			for (int x = border; x < resX - border; x++) {
 				int index = getIndex(x, y, z, resX, resY, resZ + 1);

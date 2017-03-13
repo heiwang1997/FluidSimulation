@@ -127,8 +127,8 @@ private:
 	real *rho;
 	bool loopBoundary = true;
 	const float V_PA = 5536.0e-10;
-	const float V_PB = 5.9e2;
-	const float V_RTM = 1.72;
+	const float V_PB = 3.049e-5; // 5.9e2;
+	const float V_RTM = 8.31445f * 273.0f; // 1.72;
 	const float V_INVWE = 0.0;
 
 public:

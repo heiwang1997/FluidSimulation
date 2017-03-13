@@ -158,7 +158,10 @@ void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real 
 				real vBottom = vyStar[getIndex(i, j, k, resX, resY + 1, resZ)];
 				real vBack = vzStar[getIndex(i, j, k + 1, resX, resY, resZ + 1)];
 				real vFront = vzStar[getIndex(i, j, k, resX, resY, resZ + 1)];
-
+				//cout << 2 * dx / dt << ' ' << vRight - vLeft << endl;
+				if (vRight != vLeft) {
+					//cout << 2 * dx / dt << ' ' << vRight - vLeft << endl;
+				}
 				coefficients.push_back(Triplet(center, center, 2 * dx / dt + vRight - vLeft + vTop - vBottom + vBack - vFront));
 				coefficients.push_back(Triplet(center, right, vRight));
 				coefficients.push_back(Triplet(center, left, -vLeft));
@@ -200,7 +203,12 @@ void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real 
 		cout << " output:" << endl;
 		//cout << "  vxStar: " << fieldMax(vxStar, totalVX) << endl;
 		cout << "  rhoPrime " << fieldMax(out_rhoPrime, totalCells, true) << endl;
-		printSlicePreview(out_rhoPrime, resX, resY, resZ, resZ / 2);
+		//printSlicePreview(out_rhoPrime, resX, resY, resZ, resZ / 2);
+		//real* newRho = new real[totalCells];
+		//for (int i = 0; i < totalCells; ++i) {
+		//	newRho[i] = out_rhoPrime[i] + rhoStar[i];
+		//}
+		//printSlicePreview(newRho, resX, resY, resZ, resZ / 2);
 	}
 }
 
@@ -224,16 +232,20 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 	for (int i = 0; i < totalCells; ++i) {
 		rhoStarStar[i] = rhoStar[i] + rhoPrime[i];
 		if (rhoStar[i] == 0) {
-			cout << "rhoStar" << endl;
+			cout << "rhoStar can be zero" << endl;
 		}
 		if (rhoStarStar[i] == 0) {
-			cout << "rhoStarStar" << endl;
+			cout << "rhoStarStar can be zero" << endl;
 		}
 	}
 	real *laplaceRhoStarStar = new real[totalCells];
 	laplaceRhoOnAlignedGrid(rhoStarStar, laplaceRhoStarStar);
 	real *laplaceRhoStar = new real[totalCells];
 	laplaceRhoOnAlignedGrid(rhoStar, laplaceRhoStar);
+
+	memset(out_vxPrime, 0, sizeof(real) * totalVX);
+	memset(out_vyPrime, 0, sizeof(real) * totalVY);
+	memset(out_vzPrime, 0, sizeof(real) * totalVZ);
 
 	// We employ a loop boundary, so res is compied from 0
 	// update vx
@@ -243,9 +255,6 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 				int vIndex = getIndex(i, j, k, resX + 1, resY, resZ);
 				int centerRight = getIndex(i, j, k, resX, resY, resZ);
 				int centerLeft = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
-
-				checkFuncWrong(rhoStarStar, centerLeft, centerRight);
-				checkFuncWrong(rhoStar, centerLeft, centerRight);
 
 				out_vxPrime[vIndex] += -(rhoStarStar[centerRight] - rhoStarStar[centerLeft]) *
 					(funcWd(0.5f * (rhoStarStar[centerLeft] + rhoStarStar[centerRight]))) / dx * dt;
@@ -301,6 +310,11 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 	delete[] laplaceRhoStarStar;
 	delete[] laplaceRhoStar;
 
+	if (debugOutput) {
+		cout << "+computeVelocityPrime()" << endl;
+		cout << "    vxPrime: " << fieldMax(out_vxPrime, totalVX) << endl;
+	}
+
 }
 
 // I wonder why writing in C is like writing verilog... inout wire[31:0] io_vxGuess
@@ -344,6 +358,13 @@ bool StaggeredGrid::updateGuesses(real * io_vxGuess, real * io_vyGuess,
 		io_rhoGuess[i] += lambda_rho * in_rhoPrime[i];
 		squaredNormRhoPrime += in_rhoPrime[i] * in_rhoPrime[i];
 	}
+
+	if (debugOutput) {
+		cout << "Convergence Judgment+++++++++++++++++" << endl;
+		cout << "Delta Rho: " << squaredNormRhoPrime << endl;
+		cout << "Delta Velocity: " << squaredNormVPrime << endl;
+	}
+
 	if (squaredNormRhoPrime < eps && squaredNormVPrime < eps) {
 		return true;
 	}
@@ -404,7 +425,7 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		delete[] vyPrime;
 		delete[] vzPrime;
 		if (converged) {
-			cout << "converged in " << loopcnt << " iterations" << endl;
+			cout << "converged in " << loopcnt << " iterations --------------------------------------------------------------------------" << endl;
 			break;
 		}
 		//cout << fieldMax(velocityX, totalVX) << "---" << fieldMax(vxGuess, totalVX) << endl;
@@ -438,12 +459,15 @@ void StaggeredGrid::addBubble() {
 
 	double totalmass = 0;
 
+	real liquidDensity = 1000.0f;
+	real vaporDensity = 0.6f;
+
 	for (int z = 0; z < resZ; z++)
 		for (int y = 0; y < resY; y++)
 			for (int x = 0; x < resX; x++)
 			{
 				int index = x + y * resX + z * slabSize;
-				rho[index] = 500.0f; //liquid dens
+				rho[index] = liquidDensity; //liquid dens
 
 				// Grid center position
 				Vec3f gc = Vec3f(x + 0.5, y + 0.5, z + 0.5) * dx;
@@ -451,13 +475,13 @@ void StaggeredGrid::addBubble() {
 				//bubble1
 				Vec3f dis = gc - bubble1;
 				if (mag2(dis) < Rb1 * Rb1) {
-					rho[index] = 0.5f;  //vapor dens
+					rho[index] = vaporDensity;  //vapor dens
 				}
 
 				//bubble2
 				dis = gc - bubble2;
 				if (mag2(dis) < Rb2 * Rb2) {
-					rho[index] = 0.5f;  //vapor dens
+					rho[index] = vaporDensity;  //vapor dens
 				}
 				totalmass += rho[index];
 			}

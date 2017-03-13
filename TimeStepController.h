@@ -2,6 +2,9 @@
 #define TIME_STEP_CONTROLLER
 #define _CRT_SECURE_NO_WARNINGS
 
+#include <iostream>
+// using namespace std;
+
 #define TIME_ACCURACY 1e-4
 
 class TimeStepController {
@@ -29,6 +32,9 @@ public:
 		return _currentTime>_totalTime;
 	}
 	float getStepDt() {
+		std::cout << "GetStepDt()" << std::endl;
+		std::cout << "dt = " << _defaultDt << std::endl;
+		std::cout << "frameTime = " << _spf << std::endl;
 		float dt = _defaultDt;
 		float supposeNextTime = _currentTime + dt;
 		if (supposeNextTime - _frameTime>-TIME_ACCURACY) {

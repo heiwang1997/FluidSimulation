@@ -5,7 +5,7 @@
 #include <iostream>
 // using namespace std;
 
-#define TIME_ACCURACY 1e-4
+#define TIME_ACCURACY 1e-8
 
 class TimeStepController {
 public:
@@ -35,6 +35,7 @@ public:
 		std::cout << "GetStepDt()" << std::endl;
 		std::cout << "dt = " << _defaultDt << std::endl;
 		std::cout << "frameTime = " << _spf << std::endl;
+		std::cout << "Current Time = " << _currentTime << std::endl;
 		float dt = _defaultDt;
 		float supposeNextTime = _currentTime + dt;
 		if (supposeNextTime - _frameTime>-TIME_ACCURACY) {

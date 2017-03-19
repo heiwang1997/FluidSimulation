@@ -10,8 +10,16 @@
 using std::cout;
 using std::endl;
 
-StaggeredGrid::StaggeredGrid(Config *_config) {
+StaggeredGrid::StaggeredGrid(Config *_config) 
+	: V_PA(_config->vdwPA() / (_config->vdwPM() * _config->vdwPM())),
+	  V_PB(_config->vdwPM() / _config->vdwPB()),
+	  V_RTM(8.31445f * _config->vdwTheta() / _config->vdwPM()) {
 	config = _config;
+
+	cout << "V_PA = " << V_PA << endl;
+	cout << "V_PB = " << V_PB << endl;
+	cout << "V_RTM = " << V_RTM << endl;
+
 	resX = config->resX();
 	resY = config->resY();
 	resZ = config->resZ();
@@ -1822,7 +1830,7 @@ void StaggeredGrid::extrapolateVelocity() {
 }
 
 /* this is a debugging interface, you may define your own and delete this one safely*/
-StaggeredGrid::StaggeredGrid(bool test) {
+StaggeredGrid::StaggeredGrid(bool test) : V_PA(-1e6), V_PB(3), V_RTM(3) {
 	resX = resY = 100; resZ = 5;
 	totalCells = resX * resY * resZ;
 	slabSize = resX * resY;

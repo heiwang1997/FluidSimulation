@@ -126,10 +126,11 @@ private:
 	// pointers are never copied except in argument passing.
 	real *rho;
 	bool loopBoundary = true;
-	const float V_PA = 5536.0e-10;
-	const float V_PB = 3.049e-5; // 5.9e2;
-	const float V_RTM = 8.31445f * 273.0f; // 1.72;
-	const float V_INVWE = 0.0;
+	const float V_PA; // = 5536.0e-10;
+	const float V_PB; // = 6.0e2; //3.049e-5; // 5.9e2;
+	const float V_RTM; // = 8.31445f * 373.1f / 1.8e-2f; // 1.72;
+	const float V_PR = 8.31445f;
+	const float V_INVWE = 1.0f / 6.55e4;
 
 public:
 	/* set initial guess */
@@ -139,7 +140,7 @@ public:
 		real *out_vxStar, real *out_vyStar, real *out_vzStar);
 	/* solve for rho' */
 	void computeRhoPrime(real dt, real *vxStar, real *vyStar, real *vzStar, real *rhoStar, real *out_rhoPrime);
-	/*  */
+	/* solve for v' */
 	void computeVelocityPrime(real dt, real *vxStar, real *vyStar, real *vzStar, real *rhoStar, real *rhoPrime,
 		real *out_vxPrime, real *out_vyPrime, real *out_vzPrime);
 	/* return true if algorithm converges ( ||rho'||<tol, ||u'||<tol ) */

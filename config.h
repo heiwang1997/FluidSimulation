@@ -74,6 +74,12 @@ public:
 	float fixVelocityYTop() {return cfg_.lookup("fix_velocity_y_top");}
 	float fixVelocityXLeft() {return cfg_.lookup("fix_velocity_x_left");}
 	float initVelocityZRato() {return cfg_.lookup("init_velocity_z_rato");}
+	float vdwPA() { return cfg_.lookup("vdw_a"); }
+	float vdwPB() { return cfg_.lookup("vdw_b"); }
+	float vdwTheta() { return cfg_.lookup("vdw_theta"); }
+	float vdwPM() { return cfg_.lookup("vdw_m"); }
+	float vdwLiquidRho() { return cfg_.lookup("vdw_liquid_rho"); }
+	float vdwVaporRho() { return cfg_.lookup("vdw_vapor_rho"); }
 	// Getters end
 
 private:

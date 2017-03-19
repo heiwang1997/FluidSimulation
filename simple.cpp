@@ -1,5 +1,6 @@
 #include "stdafx.h"
 #include <Eigen/Sparse>
+#include <fstream>
 #include "StaggeredGrid.h"
 #include "FieldManipulation.h"
 #include "config.h"
@@ -120,6 +121,16 @@ void printSlicePreview(real* arr, int resX, int resY, int resZ, int z) {
 	cout << "End of dump" << endl;
 }
 
+void writeSlicePreviewToFile(const char* filename, real* arr, int resX, int resY, int resZ, int z) {
+	std::ofstream fout(filename);
+	for (int i = 0; i < resX; ++i) {
+		for (int j = 0; j < resY; ++j) {
+			fout << arr[getIndex(i, j, z, resX, resY, resZ)] << '\t';
+		}
+		fout << endl << endl << endl;
+	}
+}
+
 // Rho Prime is calculated using C.E.
 // See rhoprime.docx for more info.
 void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real * vzStar, 
@@ -200,7 +211,7 @@ void StaggeredGrid::computeRhoPrime(real dt, real * vxStar, real * vyStar, real 
 	memcpy(out_rhoPrime, x.data(), sizeof(real) * totalCells);
 
 	if (debugOutput) {
-		cout << " output:" << endl;
+		cout << " output (Solver):" << endl;
 		//cout << "  vxStar: " << fieldMax(vxStar, totalVX) << endl;
 		cout << "  rhoPrime " << fieldMax(out_rhoPrime, totalCells, true) << endl;
 		//printSlicePreview(out_rhoPrime, resX, resY, resZ, resZ / 2);
@@ -231,17 +242,28 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 	real* rhoStarStar = new real[totalCells];
 	for (int i = 0; i < totalCells; ++i) {
 		rhoStarStar[i] = rhoStar[i] + rhoPrime[i];
+		if (rhoStarStar[i] < 0.0f) {
+			//cout << "Minus occured = " << rhoStarStar[i] << endl;
+			rhoStarStar[i] = 1e-6;
+		}
 		if (rhoStar[i] == 0) {
 			cout << "rhoStar can be zero" << endl;
 		}
-		if (rhoStarStar[i] == 0) {
-			cout << "rhoStarStar can be zero" << endl;
-		}
+		//if (rhoStarStar[i] == 0) {
+		//	cout << "rhoStarStar can be zero" << endl;
+		//}
 	}
 	real *laplaceRhoStarStar = new real[totalCells];
 	laplaceRhoOnAlignedGrid(rhoStarStar, laplaceRhoStarStar);
 	real *laplaceRhoStar = new real[totalCells];
 	laplaceRhoOnAlignedGrid(rhoStar, laplaceRhoStar);
+
+	if (debugOutput) {
+		cout << "Rho * is below" << endl;
+		//printSlicePreview(rhoStar, resX, resY, resZ, resZ / 2);
+		cout << "Rho ** is below" << endl;
+		//printSlicePreview(rhoStarStar, resX, resY, resZ, resZ / 2);
+	}
 
 	memset(out_vxPrime, 0, sizeof(real) * totalVX);
 	memset(out_vyPrime, 0, sizeof(real) * totalVY);
@@ -333,7 +355,7 @@ bool StaggeredGrid::updateGuesses(real * io_vxGuess, real * io_vyGuess,
 	}
 
 	static const real lambda_rho = 1.0;
-	static const real eps = 1e-6;
+	static const real eps = 1e-5;
 
 	double squaredNormVPrime = 0.0, squaredNormRhoPrime = 0.0;
 	for (int i = 0; i < totalVX; i++) {
@@ -374,6 +396,7 @@ bool StaggeredGrid::updateGuesses(real * io_vxGuess, real * io_vyGuess,
 }
 
 void StaggeredGrid::stepSIMPLE(real dt) {
+	debugOutput = false;
 	real *vxGuess = new real[totalVX];
 	real *vyGuess = new real[totalVY];
 	real *vzGuess = new real[totalVZ];
@@ -426,6 +449,17 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		delete[] vzPrime;
 		if (converged) {
 			cout << "converged in " << loopcnt << " iterations --------------------------------------------------------------------------" << endl;
+			float totalMass = 0.0f;
+			for (int z = 0; z < resZ; ++z) {
+				for (int y = 0; y < resY; ++y) {
+					for (int x = 0; x < resX; ++x) {
+						totalMass += rhoGuess[getIndex(x, y, z, resX, resY, resZ)];
+					}
+				}
+			}
+			cout << "Total Mass = " << totalMass << endl;
+			//printSlicePreview(rhoGuess, resX, resY, resZ, resZ / 2);
+			//printSlicePreview(vxGuess, resX + 1, resY, resZ, resZ / 2);
 			break;
 		}
 		//cout << fieldMax(velocityX, totalVX) << "---" << fieldMax(vxGuess, totalVX) << endl;
@@ -435,6 +469,36 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 			cout << "end of iteration\n" << endl;
 		}
 	}
+	// --------------------------------------------------------------
+	// Dump a slice into text, to be analysed in MATLAB.
+	static int fileCount = 0;
+	char rhoStr[10] = "1/rho";
+	char vxStr[10] = "1/vx";
+	char vyStr[10] = "1/vy";
+	sprintf(rhoStr + 5, "%d", fileCount);
+	sprintf(vxStr + 4, "%d", fileCount);
+	sprintf(vyStr + 4, "%d", fileCount);
+	// Compute DeltaField
+	real* rhoDelta = new real[totalCells];
+	real* vxDelta = new real[totalVX];
+	real* vyDelta = new real[totalVY];
+
+	for (int i = 0; i < totalCells; ++i)
+		rhoDelta[i] = rhoGuess[i] - rho[i];
+	for (int i = 0; i < totalVX; ++i)
+		vxDelta[i] = vxGuess[i] - velocityX[i];
+	for (int i = 0; i < totalVY; ++i)
+		vyDelta[i] = vyGuess[i] - velocityY[i];
+
+	writeSlicePreviewToFile(rhoStr, rhoDelta, resX, resY, resZ, resZ / 2);
+	writeSlicePreviewToFile(vxStr, vxDelta, resX + 1, resY, resZ, resZ / 2);
+	writeSlicePreviewToFile(vyStr, vyDelta, resX, resY + 1, resZ, resZ / 2);
+	fileCount += 1;
+	
+	delete[] rhoDelta;
+	delete[] vxDelta;
+	delete[] vyDelta;
+	// --------------------------------------------------------------
 	//cout << fieldMax(velocityX, totalVX) << " " << fieldMax(vxGuess, totalVX) << endl;
 	memcpy(velocityX, vxGuess, totalVX * sizeof(real));
 	memcpy(velocityY, vyGuess, totalVY * sizeof(real));
@@ -459,8 +523,8 @@ void StaggeredGrid::addBubble() {
 
 	double totalmass = 0;
 
-	real liquidDensity = 1000.0f;
-	real vaporDensity = 0.6f;
+	real liquidDensity = config->vdwLiquidRho();
+	real vaporDensity = config->vdwVaporRho();
 
 	for (int z = 0; z < resZ; z++)
 		for (int y = 0; y < resY; y++)
@@ -516,7 +580,6 @@ void StaggeredGrid::runSIMPLE() {
 void StaggeredGrid::laplaceRhoOnAlignedGrid(real * rho, real * out_laplacianRho) {
 	// var for debugging purpose, remove when optimize.
 	bool allZero = true;
-	// Question: How to discretize a Laplacian?
 	for (int i = 0; i < resX; i++) {
 		for (int j = 0; j < resY; j++) {
 			for (int k = 0; k < resZ; k++) {
@@ -552,10 +615,9 @@ real StaggeredGrid::funcWd(real r) {
 		cout << "illegal value for funcWd, error 2" << endl;
 		exit(0);
 	}
-	static const real theta = 1.0f;
 
 	//real ans = -2 * V_PA * r + V_RTM * log(r / (V_PB - r)) + V_RTM * V_PB / (r - V_PB);
-	real ans = -2 * V_PA + (V_PB * V_PB * V_RTM * theta) / (r * (V_PB - r) * (V_PB - r));
+	real ans = -2 * V_PA + (V_PB * V_PB * V_RTM) / (r * (V_PB - r) * (V_PB - r));
 	
 	if (ans != ans) { // NaN. && r < 0 ???
 		cout << "funcWd(): " << r << endl;

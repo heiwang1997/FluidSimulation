@@ -1,0 +1,6 @@
+function [ next_root ] = find_next_root( arr, this_root, end_iter )
+
+
+
+end
+

@@ -1,0 +1,3 @@
+pic_id = 0;
+rhoField = load(['../1/rho' int2str(pic_id)]);
+vxFiel

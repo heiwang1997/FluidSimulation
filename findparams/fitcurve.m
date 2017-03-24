@@ -4,18 +4,23 @@ a = 1708.95;
 b = 590.357;
 R = 8.314 / (1.8e-2);
 
+% Normailized form
+a = 27;
+b = 1;
+R = 1;
+
 %% Thermal Control Bar
 theta_critical = 8 * a * b / (27 * R);
-theta = 0.8 * theta_critical;
+theta = 0.9 * theta_critical;
 
 %% Fit Curve
-rho = 0:1:(0.7 * b);
+rho = 0:0.0001:(0.7 * b);
 p = ((R * b * rho * theta) ./ (b - rho)) - (a * (rho .* rho));
 p = p ./ (a * b * b / 27);
-plot(rho, p);
+plot(rho ./ b, p);
 
 %% Find density for vapor and liquid.
-search_range = 0:0.001:0.5;
+search_range = 0.5:0.001:0.65;
 area_delta = [];
 last_delta = 100;
 search_end = false;

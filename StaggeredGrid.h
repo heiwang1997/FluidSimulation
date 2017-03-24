@@ -130,7 +130,7 @@ private:
 	const float V_PB; // = 6.0e2; //3.049e-5; // 5.9e2;
 	const float V_RTM; // = 8.31445f * 373.1f / 1.8e-2f; // 1.72;
 	const float V_PR = 8.31445f;
-	const float V_INVWE = 1.0f / 6.55e4;
+	const float V_INVWE; // = 1.0f / 6.55e2;
 
 public:
 	/* set initial guess */
@@ -154,6 +154,7 @@ public:
 private:
 	void laplaceRhoOnAlignedGrid(real *rho, real * out_laplacianRho);
 	real funcWd(real rho);
+	real wPrimeRhoGradient(real rhoPlus, real rhoMinus, real dt);
 	void checkFieldStatus(bool summary=false);
 
 private:

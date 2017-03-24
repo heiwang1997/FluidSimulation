@@ -9,12 +9,8 @@ inline int ifloor(real x) {
 }
 
 inline int loopIndex(int pos, int dim) {
-	if (pos >= 0) {
-		return pos % dim;
-	}
-	else {
-		return pos % dim + dim;
-	}
+	int modular = pos % dim;
+	return (modular >= 0) ? modular : modular + dim;
 }
 
 inline real fieldMax(real *f, int l, bool checkZero = false) {

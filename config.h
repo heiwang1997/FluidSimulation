@@ -80,6 +80,7 @@ public:
 	float vdwPM() { return cfg_.lookup("vdw_m"); }
 	float vdwLiquidRho() { return cfg_.lookup("vdw_liquid_rho"); }
 	float vdwVaporRho() { return cfg_.lookup("vdw_vapor_rho"); }
+	float vdwPWE() { return cfg_.lookup("vdw_we"); }
 	// Getters end
 
 private:

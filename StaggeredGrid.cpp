@@ -11,9 +11,10 @@ using std::cout;
 using std::endl;
 
 StaggeredGrid::StaggeredGrid(Config *_config) 
-	: V_PA(_config->vdwPA() / (_config->vdwPM() * _config->vdwPM())),
-	  V_PB(_config->vdwPM() / _config->vdwPB()),
-	  V_RTM(8.31445f * _config->vdwTheta() / _config->vdwPM()) {
+	: V_PA(27.0f /*_config->vdwPA() / (_config->vdwPM() * _config->vdwPM())*/),
+	  V_PB(1.0f /* _config->vdwPM() / _config->vdwPB() */),
+	  V_RTM(7.2f /* 8.31445f * _config->vdwTheta() / _config->vdwPM()*/),
+	  V_INVWE(1.0f / _config->vdwPWE()) {
 	config = _config;
 
 	cout << "V_PA = " << V_PA << endl;
@@ -673,7 +674,7 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 				const int i111 = getIndex(x1, y1, z1, resX + 1, resY, resZ);
 
 				// interpolate
-
+				// cout << x << ' ' << y << ' ' << z << endl;
 				vxNew[index] = u0 * (s0 * (t0 * vxInterim[i000] +
 					t1 * vxInterim[i010]) +
 					s1 * (t0 * vxInterim[i100] +
@@ -1830,7 +1831,7 @@ void StaggeredGrid::extrapolateVelocity() {
 }
 
 /* this is a debugging interface, you may define your own and delete this one safely*/
-StaggeredGrid::StaggeredGrid(bool test) : V_PA(-1e6), V_PB(3), V_RTM(3) {
+StaggeredGrid::StaggeredGrid(bool test) : V_PA(-1e6), V_PB(3), V_RTM(3), V_INVWE(0.04f) {
 	resX = resY = 100; resZ = 5;
 	totalCells = resX * resY * resZ;
 	slabSize = resX * resY;

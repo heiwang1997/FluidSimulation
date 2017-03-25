@@ -577,7 +577,7 @@ void StaggeredGrid::addBubble() {
 	real vaporDensity = config->vdwVaporRho();
 	real interfaceScalingFactor = 100;
 
-	bool regularizedInterface = true;
+	bool regularizedInterface = false;
 
 	for (int z = 0; z < resZ; z++)
 		for (int y = 0; y < resY; y++)

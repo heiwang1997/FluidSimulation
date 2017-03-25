@@ -1,6 +1,6 @@
 pic_id = 0;
 base_folder = '../1/';
-for pic_id = 30
+for pic_id = 40
     rhoField = load([base_folder 'rho' int2str(pic_id)]);
     vxField = load([base_folder 'vx' int2str(pic_id)]);
     vyField = load([base_folder 'vy' int2str(pic_id)]);
@@ -19,7 +19,7 @@ for pic_id = 30
     end
     vxField = vxField(1:end, 1:end-1);
     for i = 1:(size(vyField, 1)-1)
-        vyField(i,:) = (vyField(i,:) + vyField(i+1,:)) ./ 2;
+        vyField(i,  :) = (vyField(i,:) + vyField(i+1,:)) ./ 2;
     end
     vyField = vyField(1:end-1, 1:end);
 

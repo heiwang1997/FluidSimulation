@@ -43,6 +43,7 @@ StaggeredGrid::StaggeredGrid(Config *_config)
 	heat = (real*)calloc(totalCells, sizeof(real));
 	heatOld = (real*)calloc(totalCells, sizeof(real));
 	rho = (real*)calloc(totalCells, sizeof(real));
+	pressure = (real*)calloc(totalCells, sizeof(real));
 	forceX = (real*)calloc(totalCells, sizeof(real));
 	forceY = (real*)calloc(totalCells, sizeof(real));
 	forceZ = (real*)calloc(totalCells, sizeof(real));
@@ -86,6 +87,8 @@ StaggeredGrid::~StaggeredGrid() {
 	delete velocityZOld;
 
 	delete cellType;
+
+	delete[] pressure;
 }
 
 void StaggeredGrid::addSingleExplosion() {

@@ -125,6 +125,7 @@ private:
 	// memory is allocated and recycled in the scope where variables are defined.
 	// pointers are never copied except in argument passing.
 	real *rho;
+	real *pressure;
 	bool loopBoundary = true;
 	const float V_PA; // = 5536.0e-10;
 	const float V_PB; // = 6.0e2; //3.049e-5; // 5.9e2;
@@ -134,27 +135,31 @@ private:
 
 public:
 	/* set initial guess */
-	void setInitGuess(real *out_vxGuess, real *out_vyGuess, real *out_vzGuess, real *out_rhoGuess);
+	void setInitGuess(real *out_vxGuess, real *out_vyGuess, real *out_vzGuess, real *out_rhoGuess, 
+		real* out_pressureGuess);
 	/* update velocity */
-	void computeVelocityStar(real dt, real *vxGuess, real *vyGuess, real *vzGuess, real *rhoGuess,
+	void computeVelocityStar(real dt, real *vxGuess, real *vyGuess, real *vzGuess, real *rhoGuess, real *pressureGuess,
 		real *out_vxStar, real *out_vyStar, real *out_vzStar);
 	/* solve for rho' */
 	void computeRhoPrime(real dt, real *vxStar, real *vyStar, real *vzStar, real *rhoStar, real *out_rhoPrime);
 	/* solve for v' */
 	void computeVelocityPrime(real dt, real *vxStar, real *vyStar, real *vzStar, real *rhoStar, real *rhoPrime,
+		real *pressureOrig, real *pressurePrime,
 		real *out_vxPrime, real *out_vyPrime, real *out_vzPrime);
 	/* return true if algorithm converges ( ||rho'||<tol, ||u'||<tol ) */
 	bool updateGuesses(real * io_vxGuess, real * io_vyGuess,
 		real * io_vzGuess, real * in_vxStar, real * in_vyStar, real * in_vzStar,
 		real * in_vxPrime, real * in_vyPrime, real * in_vzPrime,
-		real * io_rhoGuess, real * in_rhoPrime);
+		real * io_rhoGuess, real * in_rhoPrime,
+		real * io_pressureGuess, real * in_pressurePrime);
 	void stepSIMPLE(real dt);
 	void addBubble();
 	void runSIMPLE();
 private:
 	void laplaceRhoOnAlignedGrid(real *rho, real * out_laplacianRho);
 	real funcWd(real rho);
-	real wPrimeRhoGradient(real rhoPlus, real rhoMinus, real dt);
+	real wPrimeRhoGradient(real rhoPlus, real rhoMinus, real pressurePlus, real pressureMinus, real dt);
+	real vdwComputePressure(real rho);
 	void checkFieldStatus(bool summary=false);
 
 private:

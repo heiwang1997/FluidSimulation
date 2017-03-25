@@ -7,11 +7,7 @@ for pic_id = 30
     % Draw pressure field if exist
     pressure_name = [base_folder 'p' int2str(pic_id)];
     if (exist(pressure_name, 'file') == 2)
-        pressureField = load(pressure_name);
-        figure;
-        title('Pressure');
-        pcolor(pressureField);
-        colorbar;
+        pressureField = load(pressure);
     end
     % Interpolation.
     for i = 1:(size(vxField, 2)-1)

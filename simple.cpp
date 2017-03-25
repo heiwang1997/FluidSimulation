@@ -8,11 +8,13 @@
 using std::cout;
 using std::endl;
 
-void StaggeredGrid::setInitGuess(real * out_vxGuess, real * out_vyGuess, real * out_vzGuess, real * out_rhoGuess) {
+void StaggeredGrid::setInitGuess(real * out_vxGuess, real * out_vyGuess, real * out_vzGuess, real * out_rhoGuess,
+	real* out_pressureGuess) {
 	memcpy(out_vxGuess, velocityX, totalVX * sizeof(real));
 	memcpy(out_vyGuess, velocityY, totalVY * sizeof(real));
 	memcpy(out_vzGuess, velocityZ, totalVZ * sizeof(real));
 	memcpy(out_rhoGuess, rho, totalCells * sizeof(real));
+	memcpy(out_pressureGuess, pressure, totalCells * sizeof(real));
 }
 
 void printSlicePreview(real* arr, int resX, int resY, int resZ, int z) {
@@ -43,7 +45,7 @@ void writeSlicePreviewToFile(const char* filename, real* arr, int resX, int resY
  * Du/Dt = - grad W'(\rho) + 1 / We * grad laplacian rho
  */
 void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess, real * vzGuess, 
-	real * rhoGuess, real * out_vxStar, real * out_vyStar, real * out_vzStar) {
+	real * rhoGuess, real *pressureGuess, real * out_vxStar, real * out_vyStar, real * out_vzStar) {
 	// Optimize Suggestion: 1. high-speed cache usage: loop seq.; 2. allocate once.
 	if (debugOutput) {
 		cout << "++ computeVelocityStar()" << endl;
@@ -83,7 +85,8 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 				int centerRight = getIndex(i, j, k, resX, resY, resZ);
 				int centerLeft = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
 				// out_vxStar[vIndex] += -(WdRho[centerRight] - WdRho[centerLeft]) / dx * dt;
-				out_vxStar[vIndex] += -wPrimeRhoGradient(rhoGuess[centerRight], rhoGuess[centerLeft], dt);
+				out_vxStar[vIndex] += -wPrimeRhoGradient(rhoGuess[centerRight], rhoGuess[centerLeft], 
+					pressureGuess[centerRight], pressureGuess[centerLeft], dt);
 				out_vxStar[vIndex] += V_INVWE * (laplaceRho[centerRight] - laplaceRho[centerLeft]) / dx * dt;
 				//if (k == resZ / 2) {
 				//	cout << -wPrimeRhoGradient(rhoGuess[centerRight], rhoGuess[centerLeft], dt) << ' ' <<
@@ -102,7 +105,8 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 				int centerAbove = getIndex(i, j, k, resX, resY, resZ);
 				int centerBelow = getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
 				// out_vyStar[vIndex] += -(WdRho[centerAbove] - WdRho[centerBelow]) / dx * dt;
-				out_vyStar[vIndex] += -wPrimeRhoGradient(rhoGuess[centerAbove], rhoGuess[centerBelow], dt);
+				out_vyStar[vIndex] += -wPrimeRhoGradient(rhoGuess[centerAbove], rhoGuess[centerBelow],
+					pressureGuess[centerAbove], pressureGuess[centerBelow], dt);
 				out_vyStar[vIndex] += V_INVWE * (laplaceRho[centerAbove] - laplaceRho[centerBelow]) / dx * dt;
 			}
 			out_vyStar[getIndex(i, resY, k, resX, resY + 1, resZ)] = out_vyStar[getIndex(i, 0, k, resX, resY + 1, resZ)];
@@ -116,7 +120,8 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 				int centerBack = getIndex(i, j, k, resX, resY, resZ);
 				int centerFront = getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
 				//out_vzStar[vIndex] += -(WdRho[centerBack] - WdRho[centerFront]) / dx * dt;
-				out_vzStar[vIndex] += -wPrimeRhoGradient(rhoGuess[centerBack], rhoGuess[centerFront], dt);
+				out_vzStar[vIndex] += -wPrimeRhoGradient(rhoGuess[centerBack], rhoGuess[centerFront],
+					pressureGuess[centerBack], pressureGuess[centerFront], dt);
 				out_vzStar[vIndex] += V_INVWE * (laplaceRho[centerBack] - laplaceRho[centerFront]) / dx * dt;
 			}
 			out_vzStar[getIndex(i, j, resZ, resX, resY, resZ + 1)] = out_vzStar[getIndex(i, j, 0, resX, resY, resZ + 1)];
@@ -235,13 +240,14 @@ void checkFuncWrong(real* arr, int pos1, int pos2) {
  * See vprime.docx for more info.
  */
 void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, real * vzStar,
-	real * rhoStar, real * rhoPrime, real * out_vxPrime, real * out_vyPrime, real * out_vzPrime) {
+	real * rhoStar, real * rhoPrime, real *pressureOrig, real *pressurePrime, 
+	real * out_vxPrime, real * out_vyPrime, real * out_vzPrime) {
 	
 	real* rhoStarStar = new real[totalCells];
 	for (int i = 0; i < totalCells; ++i) {
 		rhoStarStar[i] = rhoStar[i] + rhoPrime[i];
 		if (rhoStarStar[i] < 0.0f) {
-			//cout << "Minus occured = " << rhoStarStar[i] << endl;
+			cout << "Minus occured = " << rhoStarStar[i] << endl;
 			rhoStarStar[i] = 1e-6;
 		}
 		if (rhoStar[i] == 0) {
@@ -250,6 +256,10 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 		//if (rhoStarStar[i] == 0) {
 		//	cout << "rhoStarStar can be zero" << endl;
 		//}
+	}
+	real *pressureNew = new real[totalCells];
+	for (int i = 0; i < totalCells; ++i) {
+		pressureNew[i] = pressureOrig[i] + pressurePrime[i];
 	}
 	real *laplaceRhoStarStar = new real[totalCells];
 	laplaceRhoOnAlignedGrid(rhoStarStar, laplaceRhoStarStar);
@@ -276,10 +286,12 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 				int centerRight = getIndex(i, j, k, resX, resY, resZ);
 				int centerLeft = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
 
-				out_vxPrime[vIndex] += -wPrimeRhoGradient(rhoStarStar[centerRight], rhoStarStar[centerLeft], dt);
+				out_vxPrime[vIndex] += -wPrimeRhoGradient(rhoStarStar[centerRight], rhoStarStar[centerLeft],
+					pressureNew[centerRight], pressureNew[centerLeft], dt);
 				out_vxPrime[vIndex] += V_INVWE * (laplaceRhoStarStar[centerRight] - laplaceRhoStarStar[centerLeft]) / dx * dt;
 
-				out_vxPrime[vIndex] -= -wPrimeRhoGradient(rhoStar[centerRight], rhoStar[centerLeft], dt);
+				out_vxPrime[vIndex] -= -wPrimeRhoGradient(rhoStar[centerRight], rhoStar[centerLeft],
+					pressureOrig[centerRight], pressureOrig[centerLeft], dt);
 				out_vxPrime[vIndex] -= V_INVWE * (laplaceRhoStar[centerRight] - laplaceRhoStar[centerLeft]) / dx * dt;
 			}
 			out_vxPrime[getIndex(resX, j, k, resX + 1, resY, resZ)] = out_vxPrime[getIndex(0, j, k, resX + 1, resY, resZ)];
@@ -293,10 +305,12 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 				int centerAbove = getIndex(i, j, k, resX, resY, resZ);
 				int centerBelow = getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
 
-				out_vyPrime[vIndex] += -wPrimeRhoGradient(rhoStarStar[centerAbove], rhoStarStar[centerBelow], dt);
+				out_vyPrime[vIndex] += -wPrimeRhoGradient(rhoStarStar[centerAbove], rhoStarStar[centerBelow],
+					pressureNew[centerAbove], pressureNew[centerBelow], dt);
 				out_vyPrime[vIndex] += V_INVWE * (laplaceRhoStarStar[centerAbove] - laplaceRhoStarStar[centerBelow]) / dx * dt;
 
-				out_vyPrime[vIndex] -= -wPrimeRhoGradient(rhoStar[centerAbove], rhoStar[centerBelow], dt);
+				out_vyPrime[vIndex] -= -wPrimeRhoGradient(rhoStar[centerAbove], rhoStar[centerBelow],
+					pressureOrig[centerAbove], pressureOrig[centerBelow], dt);
 				out_vyPrime[vIndex] -= V_INVWE * (laplaceRhoStar[centerAbove] - laplaceRhoStar[centerBelow]) / dx * dt;
 			}
 			out_vyPrime[getIndex(i, resY, k, resX, resY + 1, resZ)] = out_vyPrime[getIndex(i, 0, k, resX, resY + 1, resZ)];
@@ -310,10 +324,12 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 				int centerBack = getIndex(i, j, k, resX, resY, resZ);
 				int centerFront = getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
 
-				out_vzPrime[vIndex] += -wPrimeRhoGradient(rhoStarStar[centerBack], rhoStarStar[centerFront], dt);
+				out_vzPrime[vIndex] += -wPrimeRhoGradient(rhoStarStar[centerBack], rhoStarStar[centerFront],
+					pressureNew[centerBack], pressureNew[centerFront], dt);
 				out_vzPrime[vIndex] += V_INVWE * (laplaceRhoStarStar[centerBack] - laplaceRhoStarStar[centerFront]) / dx * dt;
 
-				out_vzPrime[vIndex] -= -wPrimeRhoGradient(rhoStar[centerBack], rhoStar[centerFront], dt);
+				out_vzPrime[vIndex] -= -wPrimeRhoGradient(rhoStar[centerBack], rhoStar[centerFront],
+					pressureOrig[centerBack], pressureOrig[centerFront], dt);
 				out_vzPrime[vIndex] -= V_INVWE * (laplaceRhoStar[centerBack] - laplaceRhoStar[centerFront]) / dx * dt;
 			}
 			out_vzPrime[getIndex(i, j, resZ, resX, resY, resZ + 1)] = out_vzPrime[getIndex(i, j, 0, resX, resY, resZ + 1)];
@@ -335,7 +351,8 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 bool StaggeredGrid::updateGuesses(real * io_vxGuess, real * io_vyGuess, 
 	real * io_vzGuess, real * in_vxStar, real * in_vyStar, real * in_vzStar,
 	real * in_vxPrime, real * in_vyPrime, real * in_vzPrime, 
-	real * io_rhoGuess, real * in_rhoPrime) {
+	real * io_rhoGuess, real * in_rhoPrime,
+	real * io_pressureGuess, real * in_pressurePrime) {
 	if (debugOutput) {
 		cout << "updateGuesses()" << endl;
 		checkFieldStatus();
@@ -350,6 +367,7 @@ bool StaggeredGrid::updateGuesses(real * io_vxGuess, real * io_vyGuess,
 	static const real eps = 3e-5;
 
 	double squaredNormVPrime = 0.0, squaredNormRhoPrime = 0.0;
+	double squaredNormPressurePrime = 0.0;
 	for (int i = 0; i < totalVX; i++) {
 		real finalVx = in_vxStar[i] + in_vxPrime[i];
 		real vxDelta = finalVx - io_vxGuess[i];
@@ -372,14 +390,20 @@ bool StaggeredGrid::updateGuesses(real * io_vxGuess, real * io_vyGuess,
 		io_rhoGuess[i] += lambda_rho * in_rhoPrime[i];
 		squaredNormRhoPrime += in_rhoPrime[i] * in_rhoPrime[i];
 	}
+	for (int i = 0; i < totalCells; i++) {
+		io_pressureGuess[i] += in_pressurePrime[i];
+		squaredNormPressurePrime += in_pressurePrime[i] * in_pressurePrime[i];
+	}
 
 	//if (debugOutput) {
 		cout << "Convergence Judgment+++++++++++++++++" << endl;
 		cout << "Delta Rho: " << squaredNormRhoPrime << endl;
 		cout << "Delta Velocity: " << squaredNormVPrime << endl;
+		cout << "Delta Pressure: " << squaredNormPressurePrime << endl;
 	//}
 
-	if (squaredNormRhoPrime < eps && squaredNormVPrime < eps) {
+	if (squaredNormRhoPrime < eps && squaredNormVPrime < eps &&
+		squaredNormPressurePrime < eps) {
 		return true;
 	}
 	else {
@@ -393,9 +417,10 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 	real *vyGuess = new real[totalVY];
 	real *vzGuess = new real[totalVZ];
 	real *rhoGuess = new real[totalCells];
+	real *pressureGuess = new real[totalCells];
 	if (debugOutput) cout << "set initial guess" << endl;
 	// checkFieldStatus(true);
-	setInitGuess(vxGuess, vyGuess, vzGuess, rhoGuess);
+	setInitGuess(vxGuess, vyGuess, vzGuess, rhoGuess, pressureGuess);
 
 	int loopcnt = 0;
 	while (true) {
@@ -410,7 +435,7 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		real *vxStar = new real[totalVX];
 		real *vyStar = new real[totalVY];
 		real *vzStar = new real[totalVZ];
-		computeVelocityStar(dt, vxGuess, vyGuess, vzGuess, rhoGuess, vxStar, vyStar, vzStar);
+		computeVelocityStar(dt, vxGuess, vyGuess, vzGuess, rhoGuess, pressureGuess, vxStar, vyStar, vzStar);
 		//printSlicePreview(vxStar, resX + 1, resY, resZ, resZ / 2);
 		// 2. compute rho* using the equation of state - skipped.
 		// real *rhoStar = new real[totalCells];
@@ -420,17 +445,24 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		// 3. assemble and solve *continuity equation for rho'
 		real *rhoPrime = new real[totalCells];
 		computeRhoPrime(dt, vxStar, vyStar, vzStar, rhoStar, rhoPrime);
+		// And compute pressurePrime.
+		real *pressurePrime = new real[totalCells];
+		for (int i = 0; i < totalCells; ++i) {
+			pressurePrime[i] = vdwComputePressure(rhoStar[i] + rhoPrime[i]) - vdwComputePressure(rhoStar[i]);
+		}
 
 		// 4. Compute v prime.
 		// cout << "compute v'" << endl;
 		real *vxPrime = new real[totalVX];
 		real *vyPrime = new real[totalVY];
 		real *vzPrime = new real[totalVZ];
-		computeVelocityPrime(dt, vxStar, vyStar, vzStar, rhoStar, rhoPrime, vxPrime, vyPrime, vzPrime);
+		computeVelocityPrime(dt, vxStar, vyStar, vzStar, rhoStar, rhoPrime, 
+			pressureGuess, pressurePrime, vxPrime, vyPrime, vzPrime);
 
 		// cout << "update guess" << endl;
 		bool converged = updateGuesses(vxGuess, vyGuess, vzGuess,
-			vxStar, vyStar, vzStar, vxPrime, vyPrime, vzPrime, rhoGuess, rhoPrime);
+			vxStar, vyStar, vzStar, vxPrime, vyPrime, vzPrime, rhoGuess, rhoPrime,
+			pressureGuess, pressurePrime);
 		// delete[] rhoStar;
 		delete[] vxStar;
 		delete[] vyStar;
@@ -439,6 +471,7 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		delete[] vxPrime;
 		delete[] vyPrime;
 		delete[] vzPrime;
+		delete[] pressurePrime;
 		if (converged) {
 			cout << "converged in " << loopcnt << " iterations --------------------------------------------------------------------------" << endl;
 			//float totalMass = 0.0f;
@@ -470,25 +503,32 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		char rhoStr[10] = "1/rho";
 		char vxStr[10] = "1/vx";
 		char vyStr[10] = "1/vy";
+		char pStr[10] = "1/p";
 		sprintf(rhoStr + 5, "%d", fileCount);
 		sprintf(vxStr + 4, "%d", fileCount);
 		sprintf(vyStr + 4, "%d", fileCount);
+		sprintf(pStr + 3, "%d", fileCount);
 		// Compute DeltaField
 		real* rhoDelta = new real[totalCells];
 		real* vxDelta = new real[totalVX];
 		real* vyDelta = new real[totalVY];
+		real* pressureDelta = new real[totalCells];
 
 		if (dump_delta) {
-			for (int i = 0; i < totalCells; ++i)
+			for (int i = 0; i < totalCells; ++i) {
 				rhoDelta[i] = rhoGuess[i] - rho[i];
+				pressureDelta[i] = pressureGuess[i] - pressure[i];
+			}
 			for (int i = 0; i < totalVX; ++i)
 				vxDelta[i] = vxGuess[i] - velocityX[i];
 			for (int i = 0; i < totalVY; ++i)
 				vyDelta[i] = vyGuess[i] - velocityY[i];
 		}
 		else {
-			for (int i = 0; i < totalCells; ++i)
+			for (int i = 0; i < totalCells; ++i) {
 				rhoDelta[i] = rhoGuess[i];
+				pressureDelta[i] = pressureGuess[i];
+			}
 			for (int i = 0; i < totalVX; ++i)
 				vxDelta[i] = vxGuess[i];
 			for (int i = 0; i < totalVY; ++i)
@@ -497,11 +537,13 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		
 
 		writeSlicePreviewToFile(rhoStr, rhoDelta, resX, resY, resZ, resZ / 2);
+		writeSlicePreviewToFile(pStr, pressureDelta, resX, resY, resZ, resZ / 2);
 		writeSlicePreviewToFile(vxStr, vxDelta, resX + 1, resY, resZ, resZ / 2);
 		writeSlicePreviewToFile(vyStr, vyDelta, resX, resY + 1, resZ, resZ / 2);
 		fileCount += 1;
 
 		delete[] rhoDelta;
+		delete[] pressureDelta;
 		delete[] vxDelta;
 		delete[] vyDelta;
 	}
@@ -515,6 +557,7 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 	delete[] vyGuess;
 	delete[] vzGuess;
 	delete[] rhoGuess;
+	delete[] pressureGuess;
 	cout << endl;
 }
 
@@ -568,6 +611,8 @@ void StaggeredGrid::addBubble() {
 				}
 
 				totalmass += rho[index];
+				// Should be equivalent to vdwComputePressure(liquidDensity)
+				pressure[index] = vdwComputePressure(vaporDensity);
 			}
 	printf("initial total mass: %f\n", totalmass);
 	return;
@@ -643,15 +688,21 @@ real StaggeredGrid::funcWd(real r) {
 	return ans;
 }
 
-real StaggeredGrid::wPrimeRhoGradient(real rhoPlus, real rhoMinus, real dt)
+real StaggeredGrid::wPrimeRhoGradient(real rhoPlus, real rhoMinus, real pressurePlus, real pressureMinus, real dt)
 {
 	/* return (rhoPlus - rhoMinus) *
 		(0.5f * funcWd(rhoPlus) + 0.5f * funcWd(rhoMinus)) / dx * dt; */
-	real WdRhoPlus = -2 * V_PA * rhoPlus + V_RTM * log(rhoPlus / (V_PB - rhoPlus)) + 
+	/* real WdRhoPlus = -2 * V_PA * rhoPlus + V_RTM * log(rhoPlus / (V_PB - rhoPlus)) + 
 		V_RTM * V_PB / (V_PB - rhoPlus);
 	real WdRhoMinus = -2 * V_PA * rhoMinus + V_RTM * log(rhoMinus / (V_PB - rhoMinus)) + 
 		V_RTM * V_PB / (V_PB - rhoMinus);
-	return (WdRhoPlus - WdRhoMinus) / dx * dt;
+	return (WdRhoPlus - WdRhoMinus) / dx * dt; */
+	return (dt / dx) * (pressurePlus - pressureMinus) / (0.5f * (rhoPlus + rhoMinus));
+}
+
+real StaggeredGrid::vdwComputePressure(real rho)
+{
+	return (V_RTM * V_PB * rho) / (V_PB - rho) - V_PA * rho * rho;
 }
 
 // debug function, does not modify the arrays, remove usage when optimize

@@ -58,7 +58,7 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 	}
 	// First Step:
 	// Solve: Du/Dt = 0
-	advectVelocitySemiLagrange(dt, vxGuess, vyGuess, vzGuess, 
+	advectVelocitySemiLagrange(dt / dx, vxGuess, vyGuess, vzGuess, 
 		velocityX, velocityY, velocityZ,
 		out_vxStar, out_vyStar, out_vzStar);
 
@@ -87,8 +87,10 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 				out_vxStar[vIndex] += -wPrimeRhoGradient(rhoGuess[centerRight], rhoGuess[centerLeft], dt);
 				out_vxStar[vIndex] += (dt / dx) * V_INVWE * (laplaceRho[centerRight] - laplaceRho[centerLeft]);
 				//if (k == resZ / 2) {
-				//	cout << -wPrimeRhoGradient(rhoGuess[centerRight], rhoGuess[centerLeft], dt) << ' ' <<
-				//		V_INVWE * (laplaceRho[centerRight] - laplaceRho[centerLeft]) / dx * dt << endl;
+				//	real explode = -wPrimeRhoGradient(rhoGuess[centerRight], rhoGuess[centerLeft], dt);
+				//	real maintain = V_INVWE * (laplaceRho[centerRight] - laplaceRho[centerLeft]) / dx * dt;
+				//	cout << explode << ' ' << maintain << ' ' << explode / maintain
+				//		 << endl;
 				//}
 			}
 			//if (k == resZ / 2) cout << endl;
@@ -348,7 +350,7 @@ bool StaggeredGrid::updateGuesses(real * io_vxGuess, real * io_vyGuess,
 	}
 
 	static const real lambda_rho = 1.0;
-	static const real eps = 3e-5;
+	static const real eps = 3e-7;
 
 	double squaredNormVPrime = 0.0, squaredNormRhoPrime = 0.0;
 	for (int i = 0; i < totalVX; i++) {
@@ -539,7 +541,7 @@ void StaggeredGrid::addBubble() {
 	float zTotal = dx * resZ;
 
 	Vec3f bubble1 = Vec3f(0.41, 0.50, 0.50) * xTotal;// *_xRes;
-	Vec3f bubble2 = Vec3f(0.67 /*0.67*/, 0.50, 0.50) * yTotal;// *_yRes;
+	Vec3f bubble2 = Vec3f(0.66 /*0.67*/, 0.50, 0.50) * yTotal;// *_yRes;
 	float Rb1 = 0.16 * xTotal;// *_xRes;
 	float Rb2 = 0.08 * yTotal;// *_xRes;
 
@@ -561,14 +563,15 @@ void StaggeredGrid::addBubble() {
 				if (regularizedInterface) {
 					real bubble1_dis = mag(gc - bubble1) - Rb1;
 					real bubble2_dis = mag(gc - bubble2) - Rb2;
-					/*
+					
 					rho[index] = vaporDensity + (liquidDensity - vaporDensity) / 2 * (
 						tanh(interfaceScalingFactor * bubble1_dis) +
 						tanh(interfaceScalingFactor * bubble2_dis)
 						);
-					*/
+					/*
 					rho[index] = vaporDensity + (liquidDensity - vaporDensity) / 2 * 
 						(1 + tanh(interfaceScalingFactor * bubble1_dis));
+						*/
 				}
 				else {
 					rho[index] = liquidDensity; //liquid dens

@@ -590,6 +590,7 @@ void StaggeredGrid::advectVelocitySemiLagrange(const real dt, real * vx, real * 
 /* advect vx, vy, vz inside background value, new values are stored in vNew 
 the IFLOOR macro indicates a new floor() function being used other than (int)
 */
+// !!!NOTICE: WHEN USING THIS METHOD, PLEASE USE DT/DX AS DT!!!
 void StaggeredGrid::advectVelocitySemiLagrange(const real dt,
 	real * vxBackground, real * vyBackground, real * vzBackground,
 	real * vxInterim, real *vyInterim, real *vzInterim,

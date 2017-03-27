@@ -1,7 +1,7 @@
 pic_id = 0;
-base_folder = '../1_single_bubble_wdlap/';
-saved_folder = './saved/';
-for pic_id = 100
+base_folder = '../1/';
+saved_folder = './saved_final/';
+for pic_id = 1000
     rhoField = load([base_folder 'rho' int2str(pic_id)]);
     vxField = load([base_folder 'vx' int2str(pic_id)]);
     %vxWatch = vxField;

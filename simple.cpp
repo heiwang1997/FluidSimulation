@@ -35,6 +35,7 @@ void writeSlicePreviewToFile(const char* filename, real* arr, int resX, int resY
 		}
 		fout << endl << endl << endl;
 	}
+	cout << "Dumped " << filename << endl;
 }
 
 /* This function compute V* by solving the Momentum Equation.
@@ -84,7 +85,7 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 				int centerLeft = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
 				// out_vxStar[vIndex] += -(WdRho[centerRight] - WdRho[centerLeft]) / dx * dt;
 				out_vxStar[vIndex] += -wPrimeRhoGradient(rhoGuess[centerRight], rhoGuess[centerLeft], dt);
-				out_vxStar[vIndex] += V_INVWE * (laplaceRho[centerRight] - laplaceRho[centerLeft]) / dx * dt;
+				out_vxStar[vIndex] += (dt / dx) * V_INVWE * (laplaceRho[centerRight] - laplaceRho[centerLeft]);
 				//if (k == resZ / 2) {
 				//	cout << -wPrimeRhoGradient(rhoGuess[centerRight], rhoGuess[centerLeft], dt) << ' ' <<
 				//		V_INVWE * (laplaceRho[centerRight] - laplaceRho[centerLeft]) / dx * dt << endl;
@@ -103,7 +104,7 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 				int centerBelow = getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
 				// out_vyStar[vIndex] += -(WdRho[centerAbove] - WdRho[centerBelow]) / dx * dt;
 				out_vyStar[vIndex] += -wPrimeRhoGradient(rhoGuess[centerAbove], rhoGuess[centerBelow], dt);
-				out_vyStar[vIndex] += V_INVWE * (laplaceRho[centerAbove] - laplaceRho[centerBelow]) / dx * dt;
+				out_vyStar[vIndex] += (dt / dx) * V_INVWE * (laplaceRho[centerAbove] - laplaceRho[centerBelow]);
 			}
 			out_vyStar[getIndex(i, resY, k, resX, resY + 1, resZ)] = out_vyStar[getIndex(i, 0, k, resX, resY + 1, resZ)];
 		}
@@ -117,7 +118,7 @@ void StaggeredGrid::computeVelocityStar(real dt, real * vxGuess, real * vyGuess,
 				int centerFront = getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
 				//out_vzStar[vIndex] += -(WdRho[centerBack] - WdRho[centerFront]) / dx * dt;
 				out_vzStar[vIndex] += -wPrimeRhoGradient(rhoGuess[centerBack], rhoGuess[centerFront], dt);
-				out_vzStar[vIndex] += V_INVWE * (laplaceRho[centerBack] - laplaceRho[centerFront]) / dx * dt;
+				out_vzStar[vIndex] += (dt / dx) * V_INVWE * (laplaceRho[centerBack] - laplaceRho[centerFront]);
 			}
 			out_vzStar[getIndex(i, j, resZ, resX, resY, resZ + 1)] = out_vzStar[getIndex(i, j, 0, resX, resY, resZ + 1)];
 		}
@@ -277,10 +278,10 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 				int centerLeft = getIndex((i - 1 + resX) % resX, j, k, resX, resY, resZ);
 
 				out_vxPrime[vIndex] += -wPrimeRhoGradient(rhoStarStar[centerRight], rhoStarStar[centerLeft], dt);
-				out_vxPrime[vIndex] += V_INVWE * (laplaceRhoStarStar[centerRight] - laplaceRhoStarStar[centerLeft]) / dx * dt;
+				out_vxPrime[vIndex] += (dt / dx) * V_INVWE * (laplaceRhoStarStar[centerRight] - laplaceRhoStarStar[centerLeft]);
 
 				out_vxPrime[vIndex] -= -wPrimeRhoGradient(rhoStar[centerRight], rhoStar[centerLeft], dt);
-				out_vxPrime[vIndex] -= V_INVWE * (laplaceRhoStar[centerRight] - laplaceRhoStar[centerLeft]) / dx * dt;
+				out_vxPrime[vIndex] -= (dt / dx) * V_INVWE * (laplaceRhoStar[centerRight] - laplaceRhoStar[centerLeft]);
 			}
 			out_vxPrime[getIndex(resX, j, k, resX + 1, resY, resZ)] = out_vxPrime[getIndex(0, j, k, resX + 1, resY, resZ)];
 		}
@@ -294,10 +295,10 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 				int centerBelow = getIndex(i, (j - 1 + resY) % resY, k, resX, resY, resZ);
 
 				out_vyPrime[vIndex] += -wPrimeRhoGradient(rhoStarStar[centerAbove], rhoStarStar[centerBelow], dt);
-				out_vyPrime[vIndex] += V_INVWE * (laplaceRhoStarStar[centerAbove] - laplaceRhoStarStar[centerBelow]) / dx * dt;
+				out_vyPrime[vIndex] += (dt / dx) * V_INVWE * (laplaceRhoStarStar[centerAbove] - laplaceRhoStarStar[centerBelow]);
 
 				out_vyPrime[vIndex] -= -wPrimeRhoGradient(rhoStar[centerAbove], rhoStar[centerBelow], dt);
-				out_vyPrime[vIndex] -= V_INVWE * (laplaceRhoStar[centerAbove] - laplaceRhoStar[centerBelow]) / dx * dt;
+				out_vyPrime[vIndex] -= (dt / dx) * V_INVWE * (laplaceRhoStar[centerAbove] - laplaceRhoStar[centerBelow]);
 			}
 			out_vyPrime[getIndex(i, resY, k, resX, resY + 1, resZ)] = out_vyPrime[getIndex(i, 0, k, resX, resY + 1, resZ)];
 		}
@@ -311,10 +312,10 @@ void StaggeredGrid::computeVelocityPrime(real dt, real * vxStar, real * vyStar, 
 				int centerFront = getIndex(i, j, (k - 1 + resZ) % resZ, resX, resY, resZ);
 
 				out_vzPrime[vIndex] += -wPrimeRhoGradient(rhoStarStar[centerBack], rhoStarStar[centerFront], dt);
-				out_vzPrime[vIndex] += V_INVWE * (laplaceRhoStarStar[centerBack] - laplaceRhoStarStar[centerFront]) / dx * dt;
+				out_vzPrime[vIndex] += (dt / dx) * V_INVWE * (laplaceRhoStarStar[centerBack] - laplaceRhoStarStar[centerFront]);
 
 				out_vzPrime[vIndex] -= -wPrimeRhoGradient(rhoStar[centerBack], rhoStar[centerFront], dt);
-				out_vzPrime[vIndex] -= V_INVWE * (laplaceRhoStar[centerBack] - laplaceRhoStar[centerFront]) / dx * dt;
+				out_vzPrime[vIndex] -= (dt / dx) * V_INVWE * (laplaceRhoStar[centerBack] - laplaceRhoStar[centerFront]);
 			}
 			out_vzPrime[getIndex(i, j, resZ, resX, resY, resZ + 1)] = out_vzPrime[getIndex(i, j, 0, resX, resY, resZ + 1)];
 		}
@@ -470,11 +471,17 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		char rhoStr[10] = "1/rho";
 		char vxStr[10] = "1/vx";
 		char vyStr[10] = "1/vy";
+		char wdStr[10] = "1/wd";
+		char lapStr[10] = "1/la";
 		sprintf(rhoStr + 5, "%d", fileCount);
 		sprintf(vxStr + 4, "%d", fileCount);
 		sprintf(vyStr + 4, "%d", fileCount);
+		sprintf(wdStr + 4, "%d", fileCount);
+		sprintf(lapStr + 4, "%d", fileCount);
 		// Compute DeltaField
 		real* rhoDelta = new real[totalCells];
+		real* wdDelta = new real[totalCells];
+		real* lapDelta = new real[totalCells];
 		real* vxDelta = new real[totalVX];
 		real* vyDelta = new real[totalVY];
 
@@ -487,8 +494,12 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 				vyDelta[i] = vyGuess[i] - velocityY[i];
 		}
 		else {
-			for (int i = 0; i < totalCells; ++i)
+			for (int i = 0; i < totalCells; ++i) {
 				rhoDelta[i] = rhoGuess[i];
+				wdDelta[i] = -2 * V_PA * rhoGuess[i] + V_RTM * log(rhoGuess[i] / (V_PB - rhoGuess[i])) +
+					V_RTM * V_PB / (V_PB - rhoGuess[i]);
+			}
+			laplaceRhoOnAlignedGrid(rhoGuess, lapDelta);
 			for (int i = 0; i < totalVX; ++i)
 				vxDelta[i] = vxGuess[i];
 			for (int i = 0; i < totalVY; ++i)
@@ -497,6 +508,8 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		
 
 		writeSlicePreviewToFile(rhoStr, rhoDelta, resX, resY, resZ, resZ / 2);
+		writeSlicePreviewToFile(wdStr, wdDelta, resX, resY, resZ, resZ / 2);
+		writeSlicePreviewToFile(lapStr, lapDelta, resX, resY, resZ, resZ / 2);
 		writeSlicePreviewToFile(vxStr, vxDelta, resX + 1, resY, resZ, resZ / 2);
 		writeSlicePreviewToFile(vyStr, vyDelta, resX, resY + 1, resZ, resZ / 2);
 		fileCount += 1;
@@ -504,6 +517,8 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		delete[] rhoDelta;
 		delete[] vxDelta;
 		delete[] vyDelta;
+		delete[] lapDelta;
+		delete[] wdDelta;
 	}
 	// --------------------------------------------------------------
 	//cout << fieldMax(velocityX, totalVX) << " " << fieldMax(vxGuess, totalVX) << endl;
@@ -532,7 +547,7 @@ void StaggeredGrid::addBubble() {
 
 	real liquidDensity = config->vdwLiquidRho();
 	real vaporDensity = config->vdwVaporRho();
-	real interfaceScalingFactor = 100;
+	real interfaceScalingFactor = 200;
 
 	bool regularizedInterface = true;
 
@@ -546,25 +561,33 @@ void StaggeredGrid::addBubble() {
 				if (regularizedInterface) {
 					real bubble1_dis = mag(gc - bubble1) - Rb1;
 					real bubble2_dis = mag(gc - bubble2) - Rb2;
+					/*
 					rho[index] = vaporDensity + (liquidDensity - vaporDensity) / 2 * (
 						tanh(interfaceScalingFactor * bubble1_dis) +
 						tanh(interfaceScalingFactor * bubble2_dis)
 						);
+					*/
+					rho[index] = vaporDensity + (liquidDensity - vaporDensity) / 2 * 
+						(1 + tanh(interfaceScalingFactor * bubble1_dis));
 				}
 				else {
 					rho[index] = liquidDensity; //liquid dens
-
+					if (y > resY * 0.5) {
+						rho[index] = vaporDensity;
+					}
+												/*
 					//bubble1
 					Vec3f dis = gc - bubble1;
 					if (mag2(dis) < Rb1 * Rb1) {
 						rho[index] = vaporDensity;  //vapor dens
 					}
-
+					
 					//bubble2
 					dis = gc - bubble2;
 					if (mag2(dis) < Rb2 * Rb2) {
 						rho[index] = vaporDensity;  //vapor dens
 					}
+					*/
 				}
 
 				totalmass += rho[index];

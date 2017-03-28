@@ -4,6 +4,7 @@
 #include "StaggeredGrid.h"
 #include "FieldManipulation.h"
 #include "config.h"
+#include <direct.h>
 
 using std::cout;
 using std::endl;
@@ -470,16 +471,12 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 	bool dump_delta = false;
 	if (should_dump) {
 		static int fileCount = 0;
-		char rhoStr[10] = "1/rho";
-		char vxStr[10] = "1/vx";
-		char vyStr[10] = "1/vy";
-		char wdStr[10] = "1/wd";
-		char lapStr[10] = "1/la";
-		sprintf(rhoStr + 5, "%d", fileCount);
-		sprintf(vxStr + 4, "%d", fileCount);
-		sprintf(vyStr + 4, "%d", fileCount);
-		sprintf(wdStr + 4, "%d", fileCount);
-		sprintf(lapStr + 4, "%d", fileCount);
+		_mkdir(config->fieldOutputDir());
+		char* rhoStr = getFieldOutputFilename("rho", fileCount);
+		char* vxStr = getFieldOutputFilename("vx", fileCount);
+		char* vyStr = getFieldOutputFilename("vy", fileCount);
+		char* wdStr = getFieldOutputFilename("wd", fileCount);
+		char* lapStr = getFieldOutputFilename("la", fileCount);
 		// Compute DeltaField
 		real* rhoDelta = new real[totalCells];
 		real* wdDelta = new real[totalCells];
@@ -521,6 +518,8 @@ void StaggeredGrid::stepSIMPLE(real dt) {
 		delete[] vyDelta;
 		delete[] lapDelta;
 		delete[] wdDelta;
+
+		delete[] rhoStr, vxStr, vyStr, lapStr, wdStr;
 	}
 	// --------------------------------------------------------------
 	//cout << fieldMax(velocityX, totalVX) << " " << fieldMax(vxGuess, totalVX) << endl;
@@ -551,7 +550,7 @@ void StaggeredGrid::addBubble() {
 	real vaporDensity = config->vdwVaporRho();
 	real interfaceScalingFactor = 200;
 
-	bool regularizedInterface = true;
+	bool regularizedInterface = false;
 
 	for (int z = 0; z < resZ; z++)
 		for (int y = 0; y < resY; y++)
@@ -575,8 +574,12 @@ void StaggeredGrid::addBubble() {
 				}
 				else {
 					rho[index] = liquidDensity; //liquid dens
-					if (y > resY * 0.5) {
-						rho[index] = vaporDensity;
+					if (z > resZ * 0.25 && z < resZ * 0.75) {
+						if (y > resY * 0.25 && y < resY * 0.75) {
+							if (x > resX * 0.25 && x < resX * 0.75) {
+								rho[index] = vaporDensity;
+							}
+						}
 					}
 												/*
 					//bubble1
@@ -691,4 +694,17 @@ void StaggeredGrid::checkFieldStatus(bool summary) {
 	if (summary) {
 		cout << "summary: " << vxm << ", " << vym << ", " << vzm << "; " << rhom << endl;
 	}
+}
+
+char * StaggeredGrid::getFieldOutputFilename(const char * prefix, int id)
+{
+	static const char* baseDir = config->fieldOutputDir();
+	static int outputDirLength = strlen(baseDir);
+	int prefixLength = strlen(prefix);
+	char* result = new char[outputDirLength + prefixLength + 10];
+	strcpy(result, baseDir);
+	result[outputDirLength] = '/';
+	strcpy(result + outputDirLength + 1, prefix);
+	sprintf(result + outputDirLength + prefixLength + 1, "%d", id);
+	return result;
 }

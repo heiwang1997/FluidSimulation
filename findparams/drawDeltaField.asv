@@ -1,7 +1,7 @@
 pic_id = 0;
 base_folder = '../1/';
 saved_folder = './saved_temp/';
-for pic_id = 257
+for pic_id = 0:100:4000
     rhoField = load([base_folder 'rho' int2str(pic_id)]);
     vxField = load([base_folder 'vx' int2str(pic_id)]);
     %vxWatch = vxField;
@@ -40,8 +40,6 @@ for pic_id = 257
     figure;
     quiver(vxField, vyField);
     title('ËÙ¶È³¡');
-    xlim([0 100]);
-    ylim([0 100]);
     saveas(gcf,[saved_folder 'vel' int2str(pic_id)],'bmp');
 
     figure;
@@ -54,7 +52,5 @@ for pic_id = 257
     colorbar;
     saveas(gcf,[saved_folder 'pic' int2str(pic_id)],'bmp');
 
-    fprintf('Mass sum for %d, m = %f\n', pic_id, sum(sum(rhoField)));
-    
-    % close all;
+    close all;
 end

@@ -81,6 +81,7 @@ public:
 	float vdwLiquidRho() { return cfg_.lookup("vdw_liquid_rho"); }
 	float vdwVaporRho() { return cfg_.lookup("vdw_vapor_rho"); }
 	float vdwPWE() { return cfg_.lookup("vdw_we"); }
+	const char* fieldOutputDir() { return cfg_.lookup("field_output_dir"); }
 	// Getters end
 
 private:

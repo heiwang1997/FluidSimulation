@@ -156,6 +156,7 @@ private:
 	real funcWd(real rho);
 	real wPrimeRhoGradient(real rhoPlus, real rhoMinus, real dt);
 	void checkFieldStatus(bool summary=false);
+	char* getFieldOutputFilename(const char* prefix, int id);
 
 private:
 	bool debugOutput = true;

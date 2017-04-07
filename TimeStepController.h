@@ -10,7 +10,7 @@
 class TimeStepController {
 public:
 	TimeStepController() {}
-	TimeStepController(float totalTime, float fps, float defaultDt) {
+	TimeStepController(float totalTime, int fps, float defaultDt) {
 		_totalTime = totalTime;
 		_spf = 1.0f / fps;
 		_frameFlag = false;
@@ -19,7 +19,7 @@ public:
 		_frameCnt = 0;
 		_defaultDt = defaultDt;
 	}
-	TimeStepController(int totalFrame, float fps, float defaultDt) {
+	TimeStepController(int totalFrame, int fps, float defaultDt) {
 		_spf = 1.0f / fps;
 		_totalTime = totalFrame * _spf;
 		_frameFlag = false;
@@ -32,10 +32,8 @@ public:
 		return _currentTime>_totalTime;
 	}
 	float getStepDt() {
-		std::cout << "GetStepDt()" << std::endl;
-		std::cout << "dt = " << _defaultDt << std::endl;
-		std::cout << "frameTime = " << _spf << std::endl;
-		std::cout << "Current Time = " << _currentTime << std::endl;
+		LOG(INFO) << "dt = " << _defaultDt;
+		LOG(INFO) << "Current Simulation Time: " << _currentTime << std::endl;
 		float dt = _defaultDt;
 		float supposeNextTime = _currentTime + dt;
 		if (supposeNextTime - _frameTime>-TIME_ACCURACY) {

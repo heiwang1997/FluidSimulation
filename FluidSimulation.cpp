@@ -67,10 +67,10 @@ Field* getInitRhoField(int resX, int resY, int resZ, real dx, real ld, real vd) 
 	real yTotal = dx * resY;
 	real zTotal = dx * resZ;
 
-	Vec3f bubble1 = Vec3f(0.41f * xTotal, 0.50f * yTotal, 0.50f * zTotal);// *_xRes;
-	Vec3f bubble2 = Vec3f(0.66f /*0.67f*/ * xTotal, 0.50f * yTotal, 0.50f * zTotal);// *_yRes;
-	float Rb1 = 0.16f * xTotal;// *_xRes;
-	float Rb2 = 0.08f * xTotal;// *_xRes;
+	Vec3f bubble1 = Vec3f(0.457f /*0.41f*/ * xTotal, 0.50f * yTotal, 0.50f * zTotal);// *_xRes;
+	Vec3f bubble2 = Vec3f(0.543f /*0.67f*/ * xTotal, 0.50f * yTotal, 0.50f * zTotal);// *_yRes;
+	float Rb1 = 0.04f * xTotal;// 0.16;
+	float Rb2 = 0.04f * xTotal;// 0.08;
 							  /*
 							  // Rotate 30 test
 							  real rotate_angle = -0.5236f;

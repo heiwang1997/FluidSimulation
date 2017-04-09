@@ -2,8 +2,8 @@
 #define TIME_STEP_CONTROLLER
 #define _CRT_SECURE_NO_WARNINGS
 
-#include <iostream>
-// using namespace std;
+#include <fstream>
+#include <glog/logging.h>
 
 #define TIME_ACCURACY 1e-8
 
@@ -27,6 +27,12 @@ public:
 		_frameTime = _spf;
 		_frameCnt = 0;
 		_defaultDt = defaultDt;
+	}
+	void dumpToFile(std::ofstream& fout) {
+		fout.write((char*) this, sizeof(TimeStepController));
+	}
+	void loadFromFile(std::ifstream& fin) {
+		fin.read((char*) this, sizeof(TimeStepController));
 	}
 	bool isFinished() {
 		return _currentTime>_totalTime;
@@ -59,7 +65,7 @@ public:
 	}
 
 	float _currentTime;
-
+	int _stepCount;
 protected:
 	float _totalTime;
 	float _spf;

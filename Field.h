@@ -1,5 +1,6 @@
 #pragma once
 #include "meta.h"
+#include <fstream>
 
 // Fields are stored with x-axis changing fastest
 class Field
@@ -20,6 +21,8 @@ public:
 	}
 	void writeSlabPreviewToFile(const std::string& filename, int z = -1);
 	void copyFrom(const Field*);
+	void dumpFieldToFile(std::ofstream& fout);
+	void loadFiledFromFile(std::ifstream& fin);
 	Field(int sx, int sy, int sz, bool clear = false);
 	Field(const Field&);
 	Field(const Field*, bool copy = true);

@@ -2,6 +2,7 @@
 #include <ctime>
 #include <climits>
 #include <Eigen/Sparse>
+#include "io.h"
 #include "SimpleSolver.h"
 #include "TimeStepController.h"
 #include "config.h"
@@ -463,12 +464,10 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 
 }
 
-void SimpleSolver::run()
+void SimpleSolver::run(TimeStepController* timeStep)
 {
-	TimeStepController *timeStep = new TimeStepController(
-		config->totalFrame(), config->gridFPS(), config->gridDt());
-
-	int stepCount = 0;
+	int& stepCount = timeStep->_stepCount;
+	int snapshotInterval = config->snapshotInterval();
 	while (!timeStep->isFinished()) {
 		std::clock_t startTime = std::clock();
 		stepSimple(timeStep->getStepDt());
@@ -482,17 +481,26 @@ void SimpleSolver::run()
 			(real)((endTime - startTime) / CLOCKS_PER_SEC) << "s";
 		// Write preview to destination folder.
 		{
-			std::string baseFolder = config->fieldOutputDir();
+			std::string baseFolder = config->fieldOutputDir() + "/" + config->runName() + "/";
 			_mkdir(baseFolder.c_str());
-			auto getFieldOutputFilename = [](std::string folder, std::string pfx, int count) {
-				return folder + "/" + pfx + std::to_string(count);
+			auto getFieldOutputFilename = [&](std::string pfx) {
+				return baseFolder + pfx + std::to_string(stepCount);
 			};
-			rhoField->writeSlabPreviewToFile(getFieldOutputFilename(baseFolder, "rho", stepCount));
-			vxField->writeSlabPreviewToFile(getFieldOutputFilename(baseFolder, "vx", stepCount));
-			vyField->writeSlabPreviewToFile(getFieldOutputFilename(baseFolder, "vy", stepCount));
+			rhoField->writeSlabPreviewToFile(getFieldOutputFilename("rho"));
+			vxField->writeSlabPreviewToFile(getFieldOutputFilename("vx"));
+			vyField->writeSlabPreviewToFile(getFieldOutputFilename("vy"));
+		}
+		// Dump to file every snapshot interval
+		{
+			if (stepCount % snapshotInterval == 0) {
+				std::string baseFolder = config->snapshotOutputDir() + "/" + config->runName() + "/";
+				_mkdir(baseFolder.c_str());
+				std::string snapshotFilename = baseFolder + std::to_string(stepCount);
+				LOG(INFO) << "Dumping solver state to " << snapshotFilename;
+				io::dumpSolverToFile(snapshotFilename, rhoField, vxField, vyField, vzField, timeStep);
+			}
 		}
 	}
-	delete timeStep;
 }
 
 SimpleSolver::SimpleSolver(Config * cfg, Field * initRhoField, Field * initVxField, 

@@ -26,6 +26,16 @@ void Field::copyFrom(const Field *f)
 	memcpy(content, f->content, sizeof(real) * totalSize);
 }
 
+void Field::dumpFieldToFile(std::ofstream & fout)
+{
+	fout.write((char*)this->content, sizeof(real) * totalSize);
+}
+
+void Field::loadFiledFromFile(std::ifstream & fin)
+{
+	fin.read((char*)this->content, sizeof(real) * totalSize);
+}
+
 Field::Field(int sx, int sy, int sz, bool clear /* = false */)
 	: sizeX(sx), sizeY(sy), sizeZ(sz), slabSize(sx * sy), totalSize(sx * sy * sz)
 {

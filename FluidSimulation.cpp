@@ -1,8 +1,10 @@
 #include "stdafx.h"
+#include "io.h"
 #include "meta.h"
 #include "Field.h"
 #include "config.h"
 #include "SimpleSolver.h"
+#include "TimeStepController.h"
 
 const char* defaultConfigFilename = "isothermal.cfg";
 
@@ -14,21 +16,46 @@ int main(int argc, char** argv)
 	FLAGS_colorlogtostderr = 1;
 	google::InitGoogleLogging((const char*)argv[0]);
 	Config* config;
-	if (argc == 1) {
-		LOG(INFO) << "Configuration file not specified in argv[1], default to " <<
-			defaultConfigFilename;
-		config = new Config(defaultConfigFilename);
+	Field* initRhoField = 0, *initVxField = 0, *initVyField = 0, *initVzField = 0;
+	TimeStepController* timeStep = 0;
+	if (argc <= 2) {
+		if (argc == 1) {
+			LOG(WARNING) << "Configuration file not specified in argv[1], default to " <<
+				defaultConfigFilename;
+			config = new Config(defaultConfigFilename);
+		}
+		else {
+			LOG(INFO) << "Starting from default rho field and all zero velocity fields";
+			LOG(INFO) << "Now loading " << argv[1];
+			config = new Config(argv[1]);
+		}
+		initRhoField = getInitRhoField(config->resX(), config->resY(), config->resZ(),
+			config->h(), config->vdwLiquidRho(), config->vdwVaporRho());
+		timeStep = new TimeStepController(
+			config->totalFrame(), config->gridFPS(), config->gridDt());
+	}
+	else if (argc == 3) {
+		config = new Config(argv[1]);
+		initRhoField = new Field(config->resX(), config->resY(), config->resZ());
+		initVxField = new Field(config->resX() + 1, config->resY(), config->resZ());
+		initVyField = new Field(config->resX(), config->resY() + 1, config->resZ());
+		initVzField = new Field(config->resX(), config->resY(), config->resZ() + 1);
+		timeStep = new TimeStepController(1.0f, 1, 1.0f);
+		io::loadSolverFromFile(argv[2], initRhoField, initVxField, initVyField, initVzField, timeStep);
 	}
 	else {
-		config = new Config(argv[1]);
+		std::cout << "Usage: FluidSimulation.exe <config file> <model file>" << std::endl;
+		LOG(FATAL) << "Startup parameter not supported.";
+		return 1;
 	}
-	Field* initRhoField = getInitRhoField(config->resX(), config->resY(), config->resZ(),
-		config->h(), config->vdwLiquidRho(), config->vdwVaporRho());
-	SimpleSolver* simpleSolver = new SimpleSolver(config, initRhoField, 0, 0, 0);
-	simpleSolver->run();
+	
+	SimpleSolver* simpleSolver = new SimpleSolver(config, initRhoField, initVxField, initVyField, initVzField);
+	simpleSolver->run(timeStep);
+
 	delete simpleSolver;
 	delete initRhoField;
 	delete config;
+	delete timeStep;
     return 0;
 }
 
@@ -40,10 +67,10 @@ Field* getInitRhoField(int resX, int resY, int resZ, real dx, real ld, real vd) 
 	real yTotal = dx * resY;
 	real zTotal = dx * resZ;
 
-	Vec3f bubble1 = Vec3f(0.41f, 0.50f, 0.50f) * xTotal;// *_xRes;
-	Vec3f bubble2 = Vec3f(0.66f /*0.67f*/, 0.50f, 0.50f) * yTotal;// *_yRes;
+	Vec3f bubble1 = Vec3f(0.41f * xTotal, 0.50f * yTotal, 0.50f * zTotal);// *_xRes;
+	Vec3f bubble2 = Vec3f(0.66f /*0.67f*/ * xTotal, 0.50f * yTotal, 0.50f * zTotal);// *_yRes;
 	float Rb1 = 0.16f * xTotal;// *_xRes;
-	float Rb2 = 0.08f * yTotal;// *_xRes;
+	float Rb2 = 0.08f * xTotal;// *_xRes;
 							  /*
 							  // Rotate 30 test
 							  real rotate_angle = -0.5236f;

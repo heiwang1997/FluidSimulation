@@ -4,6 +4,7 @@
 
 class Field;
 class Config;
+class TimeStepController;
 
 // Maybe non-isothermal solver should be derived from this class.
 class SimpleSolver
@@ -62,7 +63,7 @@ protected:
 			vdwTheta * vdwB / (vdwB - r);
 	}
 public:
-	void run();
+	void run(TimeStepController* step);
 	SimpleSolver(Config* cfg, Field* initRhoField, Field* initVxField,
 		Field* initVyField, Field* initVzField);
 	void stepSimple(real dt);

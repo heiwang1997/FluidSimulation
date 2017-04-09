@@ -10,6 +10,8 @@ public:
 	Config(std::string filename);
 	~Config();
 	// Getters begin
+	std::string runName() { return (const char*)cfg_.lookup("runName"); }
+
 	int resX() {return cfg_.lookup("grid.sizeX");}
 	int resY() {return cfg_.lookup("grid.sizeY");}
 	int resZ() {return cfg_.lookup("grid.sizeZ");}
@@ -30,7 +32,9 @@ public:
 	float rhoConvergeTol() { return cfg_.lookup("simpleAlgorithm.rhoConvergenceTolerance"); }
 	float rhoRelaxCoef() { return cfg_.lookup("simpleAlgorithm.rhoRelaxCoefficient"); }
 
-	std::string fieldOutputDir() { return (const char*) cfg_.lookup("debug.outputDir"); }
+	std::string fieldOutputDir() { return (const char*)cfg_.lookup("debug.outputDir"); }
+	std::string snapshotOutputDir() { return (const char*)cfg_.lookup("debug.snapshotDir"); }
+	int snapshotInterval() { return cfg_.lookup("debug.snapshotInterval"); }
 private:
 	libconfig::Config cfg_;
 };

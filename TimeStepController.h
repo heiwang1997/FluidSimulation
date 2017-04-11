@@ -18,6 +18,7 @@ public:
 		_frameTime = _spf;
 		_frameCnt = 0;
 		_defaultDt = defaultDt;
+		_stepCount = 0;
 	}
 	TimeStepController(int totalFrame, int fps, float defaultDt) {
 		_spf = 1.0f / fps;
@@ -27,6 +28,7 @@ public:
 		_frameTime = _spf;
 		_frameCnt = 0;
 		_defaultDt = defaultDt;
+		_stepCount = 0;
 	}
 	void dumpToFile(std::ofstream& fout) {
 		fout.write((char*) this, sizeof(TimeStepController));

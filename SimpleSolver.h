@@ -62,6 +62,9 @@ protected:
 		return -2 * vdwA * r + vdwTheta * log(r / (vdwB - r)) +
 			vdwTheta * vdwB / (vdwB - r);
 	}
+	inline int ifloor(real x) {
+		return (x > 0) ? (int)x : (int)(x - 1);
+	}
 public:
 	void run(TimeStepController* step);
 	SimpleSolver(Config* cfg, Field* initRhoField, Field* initVxField,

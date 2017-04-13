@@ -67,22 +67,22 @@ Field* getInitRhoField(int resX, int resY, int resZ, real dx, real ld, real vd) 
 	real yTotal = dx * resY;
 	real zTotal = dx * resZ;
 
-	Vec3f bubble1 = Vec3f(0.457f /*0.41f*/ * xTotal, 0.50f * yTotal, 0.50f * zTotal);// *_xRes;
-	Vec3f bubble2 = Vec3f(0.543f /*0.67f*/ * xTotal, 0.50f * yTotal, 0.50f * zTotal);// *_yRes;
-	float Rb1 = 0.04f * xTotal;// 0.16;
-	float Rb2 = 0.04f * xTotal;// 0.08;
-							  /*
-							  // Rotate 30 test
-							  real rotate_angle = -0.5236f;
-							  Vec3f rotate_center = Vec3f(0.50, 0.50, 0.50) * xTotal;
-							  Vec3f bubble1_rotate_vec = bubble1 - rotate_center;
-							  bubble1 = rotate_center + Vec3f(cos(rotate_angle) * bubble1_rotate_vec[0] - sin(rotate_angle) * bubble1_rotate_vec[1],
-							  sin(rotate_angle) * bubble1_rotate_vec[0] + cos(rotate_angle) * bubble1_rotate_vec[1], 0.0);
-							  Vec3f bubble2_rotate_vec = bubble2 - rotate_center;
-							  bubble2 = rotate_center + Vec3f(cos(rotate_angle) * bubble2_rotate_vec[0] - sin(rotate_angle) * bubble2_rotate_vec[1],
-							  sin(rotate_angle) * bubble2_rotate_vec[0] + cos(rotate_angle) * bubble2_rotate_vec[1], 0.0);
-							  // End rotate
-							  */
+	Vec3f bubble1 = Vec3f(0.335f /*0.41f*/ * xTotal, 0.50f * yTotal, 0.50f * zTotal);// *_xRes;
+	Vec3f bubble2 = Vec3f(0.665f /*0.67f*/ * xTotal, 0.50f * yTotal, 0.50f * zTotal);// *_yRes;
+	float Rb1 = 0.16f * xTotal;// 0.16;
+	float Rb2 = 0.16f * xTotal;// 0.08;
+
+	// Rotate 30 test
+	//real rotate_angle = -0.5236f;
+	//Vec3f rotate_center = Vec3f(0.50, 0.50, 0.50) * xTotal;
+	//Vec3f bubble1_rotate_vec = bubble1 - rotate_center;
+	//bubble1 = rotate_center + Vec3f(cos(rotate_angle) * bubble1_rotate_vec[0] - sin(rotate_angle) * bubble1_rotate_vec[1],
+	//sin(rotate_angle) * bubble1_rotate_vec[0] + cos(rotate_angle) * bubble1_rotate_vec[1], 0.0);
+	//Vec3f bubble2_rotate_vec = bubble2 - rotate_center;
+	//bubble2 = rotate_center + Vec3f(cos(rotate_angle) * bubble2_rotate_vec[0] - sin(rotate_angle) * bubble2_rotate_vec[1],
+	//sin(rotate_angle) * bubble2_rotate_vec[0] + cos(rotate_angle) * bubble2_rotate_vec[1], 0.0);
+	// End rotate
+
 	double totalmass = 0;
 
 	real liquidDensity = ld, vaporDensity = vd;

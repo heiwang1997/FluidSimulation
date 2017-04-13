@@ -607,6 +607,7 @@ void SimpleSolver::stepSimple(real dt)
 	delete vxStarField;
 	delete vyStarField;
 	delete vzStarField;
+	delete rhoPrimeField;
 	delete rhsRhoStarField;
 	delete rhsRhoStarStarField;
 }

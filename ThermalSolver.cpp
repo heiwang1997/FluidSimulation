@@ -3,13 +3,13 @@
 #include <climits>
 #include <Eigen/Sparse>
 #include "io.h"
-#include "SimpleSolver.h"
+#include "ThermalSolver.h"
 #include "TimeStepController.h"
 #include "config.h"
 #include "Field.h"
 #include <direct.h>
 
-void SimpleSolver::computeVelocityStar(real dt, 
+void ThermalSolver::computeVelocityStar(real dt, 
 	Field * vxGuessField, Field * vyGuessField, Field * vzGuessField, 
 	Field * rhoGuessField, Field* rhsRhoField,
 	Field * vxStarField, Field * vyStarField, Field * vzStarField)
@@ -43,7 +43,7 @@ void SimpleSolver::computeVelocityStar(real dt,
 
 // Rho Prime is calculated using C.E.
 // See rhoprime.docx for more info.
-void SimpleSolver::computeRhoPrime(real dt, Field* vxStarField, Field* vyStarField, Field* vzStarField,
+void ThermalSolver::computeRhoPrime(real dt, Field* vxStarField, Field* vyStarField, Field* vzStarField,
 	Field* rhoGuessField, Field* rhoPrimeField) {
 	typedef Eigen::SparseMatrix<real> SpMat;
 	typedef Eigen::Triplet<real> Triplet;
@@ -110,7 +110,7 @@ void SimpleSolver::computeRhoPrime(real dt, Field* vxStarField, Field* vyStarFie
 	memcpy(rhoPrimeField->content, x.data(), sizeof(real) * totalCells);
 }
 
-void SimpleSolver::computeVelocityPrime(real dt, 
+void ThermalSolver::computeVelocityPrime(real dt, 
 	Field * rhoGuessField, Field * rhsRhoStarField, Field * rhsRhoStarStarField, 
 	Field * vxPrimeField, Field * vyPrimeField, Field * vzPrimeField)
 {
@@ -136,7 +136,7 @@ void SimpleSolver::computeVelocityPrime(real dt,
 	fillVelocityFieldLoopBoundary(vxPrimeField, vyPrimeField, vzPrimeField);
 }
 
-void SimpleSolver::fillVelocityFieldLoopBoundary(Field * xF, Field * yF, Field * zF)
+void ThermalSolver::fillVelocityFieldLoopBoundary(Field * xF, Field * yF, Field * zF)
 {
 	real* xFc = xF->content;
 	real* yFc = yF->content;
@@ -158,7 +158,7 @@ void SimpleSolver::fillVelocityFieldLoopBoundary(Field * xF, Field * yF, Field *
 	}
 }
 
-real SimpleSolver::updateRhoField(Field * rhoGuess, Field * rhoPrime)
+real ThermalSolver::updateRhoField(Field * rhoGuess, Field * rhoPrime)
 {
 	real delta = 0.0f;
 	for (int i = 0; i < rhoGuess->totalSize; ++i) {
@@ -168,7 +168,7 @@ real SimpleSolver::updateRhoField(Field * rhoGuess, Field * rhoPrime)
 	return delta;
 }
 
-real SimpleSolver::updateVelocityField(Field * vxStarField, Field * vyStarField, Field * vzStarField,
+real ThermalSolver::updateVelocityField(Field * vxStarField, Field * vyStarField, Field * vzStarField,
 	Field * vxPrimeField, Field * vyPrimeField, Field * vzPrimeField, 
 	Field * vxGuessField, Field * vyGuessField, Field * vzGuessField)
 {
@@ -194,7 +194,7 @@ real SimpleSolver::updateVelocityField(Field * vxStarField, Field * vyStarField,
 	return delta;
 }
 
-void SimpleSolver::laplaceRhoOnAlignedGrid(Field * rF, Field * lrF)
+void ThermalSolver::laplaceRhoOnAlignedGrid(Field * rF, Field * lrF)
 {
 	real* rho = rF->content;
 	real* lapRho = lrF->content;
@@ -216,7 +216,7 @@ void SimpleSolver::laplaceRhoOnAlignedGrid(Field * rF, Field * lrF)
 	}
 }
 
-void SimpleSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF)
+void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF)
 {
 	real* rho = rF->content;
 	real* rhsRho = rhsRF->content;
@@ -239,7 +239,7 @@ void SimpleSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF)
 	}
 }
 
-void SimpleSolver::advectVelocitySemiLagrange(real dt,
+void ThermalSolver::advectVelocitySemiLagrange(real dt,
 	Field * vxBackgroundField, Field * vyBackgroundField, Field * vzBackgroundField,
 	Field * vxInterimField, Field *vyInterimField, Field *vzInterimField,
 	Field * vxNewField, Field * vyNewField, Field * vzNewField) {
@@ -464,7 +464,7 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 
 }
 
-void SimpleSolver::run(TimeStepController* timeStep)
+void ThermalSolver::run(TimeStepController* timeStep)
 {
 	int& stepCount = timeStep->_stepCount;
 	int snapshotInterval = config->snapshotInterval();
@@ -503,8 +503,8 @@ void SimpleSolver::run(TimeStepController* timeStep)
 	}
 }
 
-SimpleSolver::SimpleSolver(Config * cfg, Field * initRhoField, Field * initVxField, 
-	Field * initVyField, Field * initVzField)
+ThermalSolver::ThermalSolver(Config * cfg, Field * initRhoField, Field * initVxField, 
+	Field * initVyField, Field * initVzField, Field * initThetaField)
 {
 	resX = cfg->resX();
 	resY = cfg->resY();
@@ -513,7 +513,6 @@ SimpleSolver::SimpleSolver(Config * cfg, Field * initRhoField, Field * initVxFie
 
 	vdwA = cfg->vdwPA();
 	vdwB = cfg->vdwPB();
-	vdwTheta = cfg->vdwTheta();
 	vdwInvWe = 1.0f / cfg->vdwPWE();
 
 	velConvergeTol = cfg->velConvergeTol();
@@ -535,7 +534,7 @@ SimpleSolver::SimpleSolver(Config * cfg, Field * initRhoField, Field * initVxFie
 	config = cfg;
 }
 
-void SimpleSolver::stepSimple(real dt)
+void ThermalSolver::stepSimple(real dt)
 {
 	Field* vxGuessField = new Field(vxField);
 	Field* vyGuessField = new Field(vyField);
@@ -612,7 +611,7 @@ void SimpleSolver::stepSimple(real dt)
 	delete rhsRhoStarStarField;
 }
 
-SimpleSolver::~SimpleSolver()
+ThermalSolver::~ThermalSolver()
 {
 	delete rhoField;
 	delete vxField;

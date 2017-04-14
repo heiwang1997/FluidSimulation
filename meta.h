@@ -7,6 +7,3 @@ typedef float real;
 
 // IMPORTANT: REMOVE THE FOLLOWING DEFINE FOR SPEED
 #define CHECK_INDEX
-
-// Use LoopBoundary
-#define LOOP_BOUNDARY

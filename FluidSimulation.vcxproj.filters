@@ -63,4 +63,9 @@
   <ItemGroup>
     <Text Include="README.md" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="isothermal.cfg">
+      <Filter>资源文件</Filter>
+    </None>
+  </ItemGroup>
 </Project>

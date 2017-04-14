@@ -31,7 +31,7 @@ void SimpleSolver::computeVelocityStar(real dt,
 				for (int i = 0; i < resX; ++i) {
 					int vIndex = vStarField[d]->getIndex(i, j, k);
 					int centerPlus = rhsRhoField->getIndex(i, j, k);
-					int centerMinus = rhsRhoField->getIndex(i - (d == 0), j - (d == 1), k - (d == 2));
+					int centerMinus = rhsRhoField->getIndexLoopBoundary(i - (d == 0), j - (d == 1), k - (d == 2));
 					vStarContent[d][vIndex] += (dt / h) * (rhsRhoField->content[centerPlus] -
 						rhsRhoField->content[centerMinus]);
 				}
@@ -64,12 +64,12 @@ void SimpleSolver::computeRhoPrime(real dt, Field* vxStarField, Field* vyStarFie
 		for (int j = 0; j < resY; ++j) {
 			for (int i = 0; i < resX; ++i) {
 				int center = rhoGuessField->getIndex(i, j, k);
-				int left = rhoGuessField->getIndex(i - 1, j, k);
-				int right = rhoGuessField->getIndex(i + 1, j, k);
-				int up = rhoGuessField->getIndex(i, j + 1, k);
-				int bottom = rhoGuessField->getIndex(i, j - 1, k);
-				int front = rhoGuessField->getIndex(i, j, k - 1);
-				int back = rhoGuessField->getIndex(i, j, k + 1);
+				int left = rhoGuessField->getIndexLoopBoundary(i - 1, j, k);
+				int right = rhoGuessField->getIndexLoopBoundary(i + 1, j, k);
+				int up = rhoGuessField->getIndexLoopBoundary(i, j + 1, k);
+				int bottom = rhoGuessField->getIndexLoopBoundary(i, j - 1, k);
+				int front = rhoGuessField->getIndexLoopBoundary(i, j, k - 1);
+				int back = rhoGuessField->getIndexLoopBoundary(i, j, k + 1);
 				real vRight = vxStar[vxStarField->getIndex(i + 1, j, k)];
 				real vLeft = vxStar[vxStarField->getIndex(i, j, k)];
 				real vTop = vyStar[vyStarField->getIndex(i, j + 1, k)];
@@ -124,7 +124,7 @@ void SimpleSolver::computeVelocityPrime(real dt,
 				for (int i = 0; i < resX; ++i) {
 					int vIndex = vPrimeField[d]->getIndex(i, j, k);
 					int centerPlus = rhoGuessField->getIndex(i, j, k);
-					int centerMinus = rhoGuessField->getIndex(i - (d == 0), j - (d == 1), k - (d == 2));
+					int centerMinus = rhoGuessField->getIndexLoopBoundary(i - (d == 0), j - (d == 1), k - (d == 2));
 					vPrimeContent[d][vIndex] = (dt / h) * (rhsRhoStarStarField->content[centerPlus] -
 						rhsRhoStarStarField->content[centerMinus]);
 					vPrimeContent[d][vIndex] -= (dt / h) * (rhsRhoStarField->content[centerPlus] -
@@ -202,12 +202,12 @@ void SimpleSolver::laplaceRhoOnAlignedGrid(Field * rF, Field * lrF)
 		for (int j = 0; j < resY; ++ j) {
 			for (int i = 0; i < resX; ++ i) {
 				int center = rF->getIndex(i, j, k);
-				int left = rF->getIndex(i - 1, j, k);
-				int right = rF->getIndex(i + 1, j, k);
-				int up = rF->getIndex(i, j + 1, k);
-				int bottom = rF->getIndex(i, j - 1, k);
-				int front = rF->getIndex(i, j, k - 1);
-				int back = rF->getIndex(i, j, k + 1);
+				int left = rF->getIndexLoopBoundary(i - 1, j, k);
+				int right = rF->getIndexLoopBoundary(i + 1, j, k);
+				int up = rF->getIndexLoopBoundary(i, j + 1, k);
+				int bottom = rF->getIndexLoopBoundary(i, j - 1, k);
+				int front = rF->getIndexLoopBoundary(i, j, k - 1);
+				int back = rF->getIndexLoopBoundary(i, j, k + 1);
 				lapRho[center] = (rho[left] + rho[right] + 
 					rho[up] + rho[bottom] + rho[front] + rho[back] - 
 					6 * rho[center]) / h / h;
@@ -224,12 +224,12 @@ void SimpleSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF)
 		for (int j = 0; j < resY; ++j) {
 			for (int i = 0; i < resX; ++i) {
 				int center = rF->getIndex(i, j, k);
-				int left = rF->getIndex(i - 1, j, k);
-				int right = rF->getIndex(i + 1, j, k);
-				int up = rF->getIndex(i, j + 1, k);
-				int bottom = rF->getIndex(i, j - 1, k);
-				int front = rF->getIndex(i, j, k - 1);
-				int back = rF->getIndex(i, j, k + 1);
+				int left = rF->getIndexLoopBoundary(i - 1, j, k);
+				int right = rF->getIndexLoopBoundary(i + 1, j, k);
+				int up = rF->getIndexLoopBoundary(i, j + 1, k);
+				int bottom = rF->getIndexLoopBoundary(i, j - 1, k);
+				int front = rF->getIndexLoopBoundary(i, j, k - 1);
+				int back = rF->getIndexLoopBoundary(i, j, k + 1);
 				rhsRho[center] = - isothermalWd(rho[center]);
 				rhsRho[center] += (vdwInvWe / h / h) * (rho[left] + rho[right] +
 					rho[up] + rho[bottom] + rho[front] + rho[back] -
@@ -262,15 +262,15 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 				int index = vxBackgroundField->getIndex(x, y, z);
 				float velx = vxBackground[index];
 				float vely = (
-					vyBackground[vyBackgroundField->getIndex(x - 1, y,     z)] +
-					vyBackground[vyBackgroundField->getIndex(x - 1, y + 1, z)] +
+					vyBackground[vyBackgroundField->getIndexLoopBoundary(x - 1, y,     z)] +
+					vyBackground[vyBackgroundField->getIndexLoopBoundary(x - 1, y + 1, z)] +
 					vyBackground[vyBackgroundField->getIndex(x    , y    , z)] +
-					vyBackground[vyBackgroundField->getIndex(x    , y + 1, z)]) * 0.25f;
+					vyBackground[vyBackgroundField->getIndexLoopBoundary(x    , y + 1, z)]) * 0.25f;
 				float velz = (
 					vzBackground[vzBackgroundField->getIndex(x    , y, z)] +
-					vzBackground[vzBackgroundField->getIndex(x - 1, y, z)] +
-					vzBackground[vzBackgroundField->getIndex(x    , y, z + 1)] +
-					vzBackground[vzBackgroundField->getIndex(x - 1, y, z + 1)]) * 0.25f;
+					vzBackground[vzBackgroundField->getIndexLoopBoundary(x - 1, y, z)] +
+					vzBackground[vzBackgroundField->getIndexLoopBoundary(x    , y, z + 1)] +
+					vzBackground[vzBackgroundField->getIndexLoopBoundary(x - 1, y, z + 1)]) * 0.25f;
 
 				// backtrace
 				float xTrace = x - (dt / h) * velx;
@@ -288,12 +288,12 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 				}
 
 				// locate neighbors to interpolate
-				const int x0 = (int) floor(xTrace);
-				const int x1 = x0 + 1;
-				const int y0 = (int) floor(yTrace);
-				const int y1 = y0 + 1;
-				const int z0 = (int) floor(zTrace);
-				const int z1 = z0 + 1;
+				const int x0 = loopIndex(ifloor(xTrace), resX);
+				const int x1 = (x0 + 1) % resX;
+				const int y0 = loopIndex(ifloor(yTrace), resY);
+				const int y1 = (y0 + 1) % resY;
+				const int z0 = loopIndex(ifloor(zTrace), resZ);
+				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
 				const float s1 = xTrace - x0;
@@ -330,16 +330,16 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 			for (int x = border; x < resX - border; x++) {
 				int index = vyBackgroundField->getIndex(x, y, z);
 				float velx = (
-					vxBackground[vxBackgroundField->getIndex(x, y - 1, z)] +
+					vxBackground[vxBackgroundField->getIndexLoopBoundary(x, y - 1, z)] +
 					vxBackground[vxBackgroundField->getIndex(x, y, z)] +
-					vxBackground[vxBackgroundField->getIndex(x + 1, y - 1, z)] +
-					vxBackground[vxBackgroundField->getIndex(x + 1, y, z)]) * 0.25f;
+					vxBackground[vxBackgroundField->getIndexLoopBoundary(x + 1, y - 1, z)] +
+					vxBackground[vxBackgroundField->getIndexLoopBoundary(x + 1, y, z)]) * 0.25f;
 				float vely = vyBackground[index];
 				float velz = (
 					vzBackground[vzBackgroundField->getIndex(x, y, z)] +
-					vzBackground[vzBackgroundField->getIndex(x, y, z + 1)] +
-					vzBackground[vzBackgroundField->getIndex(x, y - 1, z)] +
-					vzBackground[vzBackgroundField->getIndex(x, y - 1, z + 1)]) * 0.25f;
+					vzBackground[vzBackgroundField->getIndexLoopBoundary(x, y, z + 1)] +
+					vzBackground[vzBackgroundField->getIndexLoopBoundary(x, y - 1, z)] +
+					vzBackground[vzBackgroundField->getIndexLoopBoundary(x, y - 1, z + 1)]) * 0.25f;
 
 				// backtrace
 				float xTrace = x - (dt / h) * velx;
@@ -356,12 +356,12 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 					if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
 				}
 
-				const int x0 = (int) floor(xTrace);
-				const int x1 = x0 + 1;
-				const int y0 = (int) floor(yTrace);
-				const int y1 = y0 + 1;
-				const int z0 = (int) floor(zTrace);
-				const int z1 = z0 + 1;
+				const int x0 = loopIndex(ifloor(xTrace), resX);
+				const int x1 = (x0 + 1) % resX;
+				const int y0 = loopIndex(ifloor(yTrace), resY);
+				const int y1 = (y0 + 1) % resY;
+				const int z0 = loopIndex(ifloor(zTrace), resZ);
+				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
 				const float s1 = xTrace - x0;
@@ -398,15 +398,15 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 			for (int x = border; x < resX - border; x++) {
 				int index = vzBackgroundField->getIndex(x, y, z);
 				real velx = (
-					vxBackground[vxBackgroundField->getIndex(x, y, z - 1)] +
+					vxBackground[vxBackgroundField->getIndexLoopBoundary(x, y, z - 1)] +
 					vxBackground[vxBackgroundField->getIndex(x, y, z)] +
-					vxBackground[vxBackgroundField->getIndex(x + 1, y, z - 1)] +
-					vxBackground[vxBackgroundField->getIndex(x + 1, y, z)]) * 0.25f;
+					vxBackground[vxBackgroundField->getIndexLoopBoundary(x + 1, y, z - 1)] +
+					vxBackground[vxBackgroundField->getIndexLoopBoundary(x + 1, y, z)]) * 0.25f;
 				real vely = (
-					vyBackground[vyBackgroundField->getIndex(x, y, z - 1)] +
-					vyBackground[vyBackgroundField->getIndex(x, y + 1, z - 1)] +
+					vyBackground[vyBackgroundField->getIndexLoopBoundary(x, y, z - 1)] +
+					vyBackground[vyBackgroundField->getIndexLoopBoundary(x, y + 1, z - 1)] +
 					vyBackground[vyBackgroundField->getIndex(x, y, z)] +
-					vyBackground[vyBackgroundField->getIndex(x, y + 1, z)]) * 0.25f;
+					vyBackground[vyBackgroundField->getIndexLoopBoundary(x, y + 1, z)]) * 0.25f;
 				real velz = vzBackground[index];
 
 				// backtrace
@@ -423,12 +423,12 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 					if (zTrace < 1.0f) zTrace = 1.0f;
 					if (zTrace > resZ - 1.0) zTrace = resZ - 1.0f;
 				}
-				const int x0 = (int) floor(xTrace);
-				const int x1 = x0 + 1;
-				const int y0 = (int) floor(yTrace);
-				const int y1 = y0 + 1;
-				const int z0 = (int) floor(zTrace);
-				const int z1 = z0 + 1;
+				const int x0 = loopIndex(ifloor(xTrace), resX);
+				const int x1 = (x0 + 1) % resX;
+				const int y0 = loopIndex(ifloor(yTrace), resY);
+				const int y1 = (y0 + 1) % resY;
+				const int z0 = loopIndex(ifloor(zTrace), resZ);
+				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
 				const float s1 = xTrace - x0;

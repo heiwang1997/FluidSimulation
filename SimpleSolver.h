@@ -48,7 +48,9 @@ protected:
 		Field * vxBackgroundField, Field * vyBackgroundField, Field * vzBackgroundField,
 		Field * vxInterimField, Field *vyInterimField, Field *vzInterimField,
 		Field * vxNewField, Field * vyNewField, Field * vzNewField);
+
 	void fillVelocityFieldLoopBoundary(Field* xF, Field* yF, Field* zF);
+
 	real updateRhoField(Field* rhoGuess, Field* rhoPrime);
 	real updateVelocityField(Field* vxStarField, Field* vyStarField, Field* vzStarField,
 		Field* vxPrimeField, Field* vyPrimeField, Field* vzPrimeField, 
@@ -64,6 +66,10 @@ protected:
 	}
 	inline int ifloor(real x) {
 		return (x > 0) ? (int)x : (int)(x - 1);
+	}
+	inline int loopIndex(int pos, int dim) {
+		int modular = pos % dim;
+		return (modular >= 0) ? modular : modular + dim;
 	}
 public:
 	void run(TimeStepController* step);

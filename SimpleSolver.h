@@ -65,6 +65,10 @@ protected:
 	inline int ifloor(real x) {
 		return (x > 0) ? (int)x : (int)(x - 1);
 	}
+	inline int loopIndex(int pos, int dim) {
+		int modular = pos % dim;
+		return (modular >= 0) ? modular : modular + dim;
+	}
 public:
 	void run(TimeStepController* step);
 	SimpleSolver(Config* cfg, Field* initRhoField, Field* initVxField,

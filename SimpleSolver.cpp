@@ -198,7 +198,7 @@ void SimpleSolver::laplaceRhoOnAlignedGrid(Field * rF, Field * lrF)
 {
 	real* rho = rF->content;
 	real* lapRho = lrF->content;
-	for (int k = 0; k < resX; ++ k) {
+	for (int k = 0; k < resZ; ++ k) {
 		for (int j = 0; j < resY; ++ j) {
 			for (int i = 0; i < resX; ++ i) {
 				int center = rF->getIndex(i, j, k);
@@ -220,7 +220,7 @@ void SimpleSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF)
 {
 	real* rho = rF->content;
 	real* rhsRho = rhsRF->content;
-	for (int k = 0; k < resX; ++k) {
+	for (int k = 0; k < resZ; ++k) {
 		for (int j = 0; j < resY; ++j) {
 			for (int i = 0; i < resX; ++i) {
 				int center = rF->getIndex(i, j, k);
@@ -288,19 +288,19 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 				}
 
 				// locate neighbors to interpolate
-				const int x0 = (int) floor(xTrace);
-				const int x1 = x0 + 1;
-				const int y0 = (int) floor(yTrace);
-				const int y1 = y0 + 1;
-				const int z0 = (int) floor(zTrace);
-				const int z1 = z0 + 1;
+				const int x0 = loopIndex(ifloor(xTrace), resX);
+				const int x1 = (x0 + 1) % resX;
+				const int y0 = loopIndex(ifloor(yTrace), resY);
+				const int y1 = (y0 + 1) % resY;
+				const int z0 = loopIndex(ifloor(zTrace), resZ);
+				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
+				const float s1 = xTrace - floor(xTrace);
 				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
+				const float t1 = yTrace - floor(yTrace);
 				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
+				const float u1 = zTrace - floor(zTrace);
 				const float u0 = 1.0f - u1;
 
 				const int i000 = vxBackgroundField->getIndex(x0, y0, z0);
@@ -356,19 +356,19 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 					if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
 				}
 
-				const int x0 = (int) floor(xTrace);
-				const int x1 = x0 + 1;
-				const int y0 = (int) floor(yTrace);
-				const int y1 = y0 + 1;
-				const int z0 = (int) floor(zTrace);
-				const int z1 = z0 + 1;
+				const int x0 = loopIndex(ifloor(xTrace), resX);
+				const int x1 = (x0 + 1) % resX;
+				const int y0 = loopIndex(ifloor(yTrace), resY);
+				const int y1 = (y0 + 1) % resY;
+				const int z0 = loopIndex(ifloor(zTrace), resZ);
+				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
+				const float s1 = xTrace - floor(xTrace);
 				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
+				const float t1 = yTrace - floor(yTrace);
 				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
+				const float u1 = zTrace - floor(zTrace);
 				const float u0 = 1.0f - u1;
 
 				const int i000 = vyBackgroundField->getIndex(x0, y0, z0);
@@ -423,19 +423,19 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 					if (zTrace < 1.0f) zTrace = 1.0f;
 					if (zTrace > resZ - 1.0) zTrace = resZ - 1.0f;
 				}
-				const int x0 = (int) floor(xTrace);
-				const int x1 = x0 + 1;
-				const int y0 = (int) floor(yTrace);
-				const int y1 = y0 + 1;
-				const int z0 = (int) floor(zTrace);
-				const int z1 = z0 + 1;
+				const int x0 = loopIndex(ifloor(xTrace), resX);
+				const int x1 = (x0 + 1) % resX;
+				const int y0 = loopIndex(ifloor(yTrace), resY);
+				const int y1 = (y0 + 1) % resY;
+				const int z0 = loopIndex(ifloor(zTrace), resZ);
+				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
+				const float s1 = xTrace - floor(xTrace);
 				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
+				const float t1 = yTrace - floor(yTrace);
 				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
+				const float u1 = zTrace - floor(zTrace);
 				const float u0 = 1.0f - u1;
 
 				const int i000 = vzBackgroundField->getIndex(x0, y0, z0);
@@ -586,13 +586,10 @@ void SimpleSolver::stepSimple(real dt)
 		}
 		else {
 			if (rhoDelta > lastRhoDelta || velDelta > lastVelDelta) {
-				LOG(WARNING) << "Converge Delta reaches its minimum. Stop iteration";
-				break;
+				LOG(WARNING) << "Converge Delta starts to increase";
 			}
-			else {
-				lastRhoDelta = rhoDelta;
-				lastVelDelta = velDelta;
-			}
+			lastRhoDelta = rhoDelta;
+			lastVelDelta = velDelta;
 		}
 	}
 	// Update current fields.

@@ -27,11 +27,14 @@ protected:
 	real h;
 	real vdwA;
 	real vdwB;
+	real vdwTheta;
 	real vdwInvWe;
 
 	real velConvergeTol;
 	real rhoConvergeTol;
 	real rhoRelaxCoef;
+
+	real envGravity;
 
 	// Steps for solving SIMPLE.
 	void computeVelocityStar(real dt, Field* vxGuessField, Field* vyGuessField,
@@ -48,16 +51,21 @@ protected:
 		Field * vxBackgroundField, Field * vyBackgroundField, Field * vzBackgroundField,
 		Field * vxInterimField, Field *vyInterimField, Field *vzInterimField,
 		Field * vxNewField, Field * vyNewField, Field * vzNewField);
+	void fillVelocityFieldBorderZero(Field* xF, Field* yF, Field* zF);
 
 	real updateRhoField(Field* rhoGuess, Field* rhoPrime);
 	real updateVelocityField(Field* vxStarField, Field* vyStarField, Field* vzStarField,
 		Field* vxPrimeField, Field* vyPrimeField, Field* vzPrimeField, 
 		Field* vxGuessField, Field* vyGuessField, Field* vzGuessField);
 	// Grid-dependent computation
-	void laplaceRhoOnAlignedGrid(Field* rho, Field* lapRho);
+	void laplacianFieldOnAlignedGrid(Field* f, Field* lapF);
 	// void wdRhoOnAlignedGrid(Field* rho, Field* wdRho);
 	// For fast and memory-efficient isothermal manipulation
 	void rhsRhoOnAlignedGrid(Field* rho, Field* rhsRho);
+	inline real isothermalWd(real r) const {
+		return -2 * vdwA * r + vdwTheta * log(r / (vdwB - r)) +
+			vdwTheta * vdwB / (vdwB - r);
+	}
 	inline int ifloor(real x) {
 		return (x > 0) ? (int)x : (int)(x - 1);
 	}

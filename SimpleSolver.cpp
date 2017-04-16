@@ -296,11 +296,11 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
+				const float s1 = xTrace - floor(xTrace);
 				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
+				const float t1 = yTrace - floor(yTrace);
 				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
+				const float u1 = zTrace - floor(zTrace);
 				const float u0 = 1.0f - u1;
 
 				const int i000 = vxBackgroundField->getIndex(x0, y0, z0);
@@ -364,11 +364,11 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
+				const float s1 = xTrace - floor(xTrace);
 				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
+				const float t1 = yTrace - floor(yTrace);
 				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
+				const float u1 = zTrace - floor(zTrace);
 				const float u0 = 1.0f - u1;
 
 				const int i000 = vyBackgroundField->getIndex(x0, y0, z0);
@@ -431,11 +431,11 @@ void SimpleSolver::advectVelocitySemiLagrange(real dt,
 				const int z1 = (z0 + 1) % resZ;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
+				const float s1 = xTrace - floor(xTrace);
 				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
+				const float t1 = yTrace - floor(yTrace);
 				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
+				const float u1 = zTrace - floor(zTrace);
 				const float u0 = 1.0f - u1;
 
 				const int i000 = vzBackgroundField->getIndex(x0, y0, z0);
@@ -586,13 +586,10 @@ void SimpleSolver::stepSimple(real dt)
 		}
 		else {
 			if (rhoDelta > lastRhoDelta || velDelta > lastVelDelta) {
-				LOG(WARNING) << "Converge Delta reaches its minimum. Stop iteration";
-				break;
+				LOG(WARNING) << "Converge Delta is larger than previous iteration.";
 			}
-			else {
-				lastRhoDelta = rhoDelta;
-				lastVelDelta = velDelta;
-			}
+			lastRhoDelta = rhoDelta;
+			lastVelDelta = velDelta;
 		}
 	}
 	// Update current fields.

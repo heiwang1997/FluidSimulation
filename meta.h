@@ -6,4 +6,4 @@
 typedef float real;
 
 // IMPORTANT: REMOVE THE FOLLOWING DEFINE FOR SPEED
-#define CHECK_INDEX
+#define CHECK_FIELD_INDEX

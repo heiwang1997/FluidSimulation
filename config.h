@@ -32,6 +32,8 @@ public:
 	float rhoConvergeTol() { return cfg_.lookup("simpleAlgorithm.rhoConvergenceTolerance"); }
 	float rhoRelaxCoef() { return cfg_.lookup("simpleAlgorithm.rhoRelaxCoefficient"); }
 
+	float gravity() { return cfg_.lookup("envConstants.gravity"); }
+
 	std::string fieldOutputDir() { return (const char*)cfg_.lookup("debug.outputDir"); }
 	std::string snapshotOutputDir() { return (const char*)cfg_.lookup("debug.snapshotDir"); }
 	int snapshotInterval() { return cfg_.lookup("debug.snapshotInterval"); }

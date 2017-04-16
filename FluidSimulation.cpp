@@ -4,9 +4,10 @@
 #include "Field.h"
 #include "config.h"
 #include "SimpleSolver.h"
+#include "ThermalSolver.h"
 #include "TimeStepController.h"
 
-const char* defaultConfigFilename = "isothermal.cfg";
+const char* defaultConfigFilename = "thermal.cfg";
 
 Field* getInitRhoField(int resX, int resY, int resZ, real dx, real ld, real vd);
 
@@ -49,7 +50,11 @@ int main(int argc, char** argv)
 		return 1;
 	}
 	
-	SimpleSolver* simpleSolver = new SimpleSolver(config, initRhoField, initVxField, initVyField, initVzField);
+	//SimpleSolver* simpleSolver = new SimpleSolver(config, initRhoField, initVxField, initVyField, initVzField);
+	//simpleSolver->run(timeStep);
+
+	//delete simpleSolver;
+	ThermalSolver* simpleSolver = new ThermalSolver(config, initRhoField, initVxField, initVyField, initVzField);
 	simpleSolver->run(timeStep);
 
 	delete simpleSolver;

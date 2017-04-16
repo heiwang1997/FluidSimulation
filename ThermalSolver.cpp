@@ -9,6 +9,13 @@
 #include "Field.h"
 #include <direct.h>
 
+template<class T>
+inline T scalarClamp(T target, T lower, T upper) {
+	if (target > upper) return upper;
+	if (target < lower) return lower;
+	return target;
+}
+
 void ThermalSolver::computeVelocityStar(real dt, 
 	Field * vxGuessField, Field * vyGuessField, Field * vzGuessField, 
 	Field * rhoGuessField, Field* rhsRhoField,
@@ -26,19 +33,22 @@ void ThermalSolver::computeVelocityStar(real dt,
 	Field* vStarField[3] = {vxStarField, vyStarField, vzStarField};
 	real* vStarContent[3] = { vxStarField->content, vyStarField->content, vzStarField->content };
 	for (int d = 0; d < 3; ++d) {
-		for (int k = 0; k < resZ; ++k) {
-			for (int j = 0; j < resY; ++j) {
-				for (int i = 0; i < resX; ++i) {
+		for (int k = 1; k < resZ; ++k) {
+			for (int j = 1; j < resY; ++j) {
+				for (int i = 1; i < resX; ++i) {
 					int vIndex = vStarField[d]->getIndex(i, j, k);
 					int centerPlus = rhsRhoField->getIndex(i, j, k);
-					int centerMinus = rhsRhoField->getIndexLoopBoundary(i - (d == 0), j - (d == 1), k - (d == 2));
+					int centerMinus = rhsRhoField->getIndex(i - (d == 0), j - (d == 1), k - (d == 2));
 					vStarContent[d][vIndex] += (dt / h) * (rhsRhoField->content[centerPlus] -
 						rhsRhoField->content[centerMinus]);
+					// Add gravity at y axis.
+					if (d == 1) {
+						vStarContent[d][vIndex] -= envGravity * dt;
+					}
 				}
 			}
 		}
 	}
-	fillVelocityFieldLoopBoundary(vxStarField, vyStarField, vzStarField);
 }
 
 // Rho Prime is calculated using C.E.
@@ -114,46 +124,26 @@ void ThermalSolver::computeVelocityPrime(real dt,
 	Field * rhoGuessField, Field * rhsRhoStarField, Field * rhsRhoStarStarField, 
 	Field * vxPrimeField, Field * vyPrimeField, Field * vzPrimeField)
 {
+	// Fill v' border with zero.
+	fillVelocityFieldBorderZero(vxPrimeField, vyPrimeField, vzPrimeField);
 
 	rhsRhoOnAlignedGrid(rhoGuessField, rhsRhoStarStarField);
 	Field* vPrimeField[3] = { vxPrimeField, vyPrimeField, vzPrimeField };
 	real* vPrimeContent[3] = { vxPrimeField->content, vyPrimeField->content, vzPrimeField->content };
 	for (int d = 0; d < 3; ++d) {
-		for (int k = 0; k < resZ; ++k) {
-			for (int j = 0; j < resY; ++j) {
-				for (int i = 0; i < resX; ++i) {
+		for (int k = 1; k < resZ; ++k) {
+			for (int j = 1; j < resY; ++j) {
+				for (int i = 1; i < resX; ++i) {
 					int vIndex = vPrimeField[d]->getIndex(i, j, k);
 					int centerPlus = rhoGuessField->getIndex(i, j, k);
-					int centerMinus = rhoGuessField->getIndexLoopBoundary(i - (d == 0), j - (d == 1), k - (d == 2));
+					int centerMinus = rhoGuessField->getIndex(i - (d == 0), j - (d == 1), k - (d == 2));
 					vPrimeContent[d][vIndex] = (dt / h) * (rhsRhoStarStarField->content[centerPlus] -
 						rhsRhoStarStarField->content[centerMinus]);
 					vPrimeContent[d][vIndex] -= (dt / h) * (rhsRhoStarField->content[centerPlus] -
 						rhsRhoStarField->content[centerMinus]);
+					// The gravity term cancels.
 				}
 			}
-		}
-	}
-	fillVelocityFieldLoopBoundary(vxPrimeField, vyPrimeField, vzPrimeField);
-}
-
-void ThermalSolver::fillVelocityFieldLoopBoundary(Field * xF, Field * yF, Field * zF)
-{
-	real* xFc = xF->content;
-	real* yFc = yF->content;
-	real* zFc = zF->content;
-	for (int k = 0; k < resZ; k++) {
-		for (int j = 0; j < resY; j++) {
-			xFc[xF->getIndex(resX, j, k)] = xFc[xF->getIndex(0, j, k)];
-		}
-	}
-	for (int i = 0; i < resX; i++) {
-		for (int k = 0; k < resZ; k++) {
-			yFc[yF->getIndex(i, resY, k)] = yFc[yF->getIndex(i, 0, k)];
-		}
-	}
-	for (int i = 0; i < resX; i++) {
-		for (int j = 0; j < resY; j++) {
-			zFc[zF->getIndex(i, j, resZ)] = zFc[zF->getIndex(i, j, 0)];
 		}
 	}
 }
@@ -194,23 +184,23 @@ real ThermalSolver::updateVelocityField(Field * vxStarField, Field * vyStarField
 	return delta;
 }
 
-void ThermalSolver::laplaceRhoOnAlignedGrid(Field * rF, Field * lrF)
+void ThermalSolver::laplacianFieldOnAlignedGrid(Field* f, Field* lapF)
 {
-	real* rho = rF->content;
-	real* lapRho = lrF->content;
+	real* fc = f->content;
+	real* lapFc = lapF->content;
 	for (int k = 0; k < resZ; ++ k) {
 		for (int j = 0; j < resY; ++ j) {
 			for (int i = 0; i < resX; ++ i) {
-				int center = rF->getIndex(i, j, k);
-				int left = rF->getIndexLoopBoundary(i - 1, j, k);
-				int right = rF->getIndexLoopBoundary(i + 1, j, k);
-				int up = rF->getIndexLoopBoundary(i, j + 1, k);
-				int bottom = rF->getIndexLoopBoundary(i, j - 1, k);
-				int front = rF->getIndexLoopBoundary(i, j, k - 1);
-				int back = rF->getIndexLoopBoundary(i, j, k + 1);
-				lapRho[center] = (rho[left] + rho[right] + 
-					rho[up] + rho[bottom] + rho[front] + rho[back] - 
-					6 * rho[center]) / h / h;
+				int center = f->getIndex(i, j, k);
+				int left = f->getIndexClampBoundary(i - 1, j, k);
+				int right = f->getIndexClampBoundary(i + 1, j, k);
+				int up = f->getIndexClampBoundary(i, j + 1, k);
+				int bottom = f->getIndexClampBoundary(i, j - 1, k);
+				int front = f->getIndexClampBoundary(i, j, k - 1);
+				int back = f->getIndexClampBoundary(i, j, k + 1);
+				lapFc[center] = (fc[left] + fc[right] +
+					fc[up] + fc[bottom] + fc[front] + fc[back] - 
+					6 * fc[center]) / h / h;
 			}
 		}
 	}
@@ -224,12 +214,12 @@ void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF)
 		for (int j = 0; j < resY; ++j) {
 			for (int i = 0; i < resX; ++i) {
 				int center = rF->getIndex(i, j, k);
-				int left = rF->getIndexLoopBoundary(i - 1, j, k);
-				int right = rF->getIndexLoopBoundary(i + 1, j, k);
-				int up = rF->getIndexLoopBoundary(i, j + 1, k);
-				int bottom = rF->getIndexLoopBoundary(i, j - 1, k);
-				int front = rF->getIndexLoopBoundary(i, j, k - 1);
-				int back = rF->getIndexLoopBoundary(i, j, k + 1);
+				int left = rF->getIndexClampBoundary(i - 1, j, k);
+				int right = rF->getIndexClampBoundary(i + 1, j, k);
+				int up = rF->getIndexClampBoundary(i, j + 1, k);
+				int bottom = rF->getIndexClampBoundary(i, j - 1, k);
+				int front = rF->getIndexClampBoundary(i, j, k - 1);
+				int back = rF->getIndexClampBoundary(i, j, k + 1);
 				rhsRho[center] = - isothermalWd(rho[center]);
 				rhsRho[center] += (vdwInvWe / h / h) * (rho[left] + rho[right] +
 					rho[up] + rho[bottom] + rho[front] + rho[back] -
@@ -253,64 +243,59 @@ void ThermalSolver::advectVelocitySemiLagrange(real dt,
 	real* vxNew = vxNewField->content; 
 	real* vyNew = vyNewField->content; 
 	real* vzNew = vzNewField->content;
+	// Fill the velocity at solid still boundaries
+	fillVelocityFieldBorderZero(vxNewField, vyNewField, vzNewField);
 	// velocity X
-	static const bool loopBoundary = true;
-	int border = loopBoundary ? 0 : 1;
-	for (int z = border; z < resZ - border; z++) {
-		for (int y = border; y < resY - border; y++) {
-			for (int x = border * 2; x < resX - border; x++) {
+	for (int z = 0; z < resZ; z++) {
+		for (int y = 0; y < resY; y++) {
+			for (int x = 1; x < resX; x++) {
 				int index = vxBackgroundField->getIndex(x, y, z);
-				float velx = vxBackground[index];
-				float vely = (
-					vyBackground[vyBackgroundField->getIndexLoopBoundary(x - 1, y,     z)] +
-					vyBackground[vyBackgroundField->getIndexLoopBoundary(x - 1, y + 1, z)] +
+				real velx = vxBackground[index];
+				real vely = (
+					vyBackground[vyBackgroundField->getIndex(x - 1, y,     z)] +
+					vyBackground[vyBackgroundField->getIndex(x - 1, y + 1, z)] +
 					vyBackground[vyBackgroundField->getIndex(x    , y    , z)] +
-					vyBackground[vyBackgroundField->getIndexLoopBoundary(x    , y + 1, z)]) * 0.25f;
-				float velz = (
+					vyBackground[vyBackgroundField->getIndex(x    , y + 1, z)]) * 0.25f;
+				real velz = (
 					vzBackground[vzBackgroundField->getIndex(x    , y, z)] +
-					vzBackground[vzBackgroundField->getIndexLoopBoundary(x - 1, y, z)] +
-					vzBackground[vzBackgroundField->getIndexLoopBoundary(x    , y, z + 1)] +
-					vzBackground[vzBackgroundField->getIndexLoopBoundary(x - 1, y, z + 1)]) * 0.25f;
+					vzBackground[vzBackgroundField->getIndex(x - 1, y, z)] +
+					vzBackground[vzBackgroundField->getIndex(x    , y, z + 1)] +
+					vzBackground[vzBackgroundField->getIndex(x - 1, y, z + 1)]) * 0.25f;
 
 				// backtrace
-				float xTrace = x - (dt / h) * velx;
-				float yTrace = y - (dt / h) * vely;
-				float zTrace = z - (dt / h) * velz;
+				real xTrace = x - (dt / h) * velx;
+				real yTrace = y - (dt / h) * vely;
+				real zTrace = z - (dt / h) * velz;
 
 				// clamp backtrace to grid boundaries
-				if (!loopBoundary) {
-					if (xTrace < 1.0) xTrace = 1.0f;
-					if (xTrace > resX - 1.0) xTrace = resX - 1.0f;
-					if (yTrace < 0.5f) yTrace = 0.5f;
-					if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-					if (zTrace < 0.5f) zTrace = 0.5f;
-					if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
-				}
+				xTrace = scalarClamp(xTrace, 0.0f, (real)resX);
+				yTrace = scalarClamp(yTrace, -0.5f, (real)(resY - 0.5f));
+				zTrace = scalarClamp(zTrace, -0.5f, (real)(resZ - 0.5f));
 
 				// locate neighbors to interpolate
-				const int x0 = loopIndex(ifloor(xTrace), resX);
-				const int x1 = (x0 + 1) % resX;
-				const int y0 = loopIndex(ifloor(yTrace), resY);
-				const int y1 = (y0 + 1) % resY;
-				const int z0 = loopIndex(ifloor(zTrace), resZ);
-				const int z1 = (z0 + 1) % resZ;
+				const int x0 = ifloor(xTrace);
+				const int x1 = x0 + 1;
+				const int y0 = ifloor(yTrace);
+				const int y1 = y0 + 1;
+				const int z0 = ifloor(zTrace);
+				const int z1 = z0 + 1;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
-				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
-				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
-				const float u0 = 1.0f - u1;
+				const real s1 = xTrace - floor(xTrace);
+				const real s0 = 1.0f - s1;
+				const real t1 = yTrace - floor(yTrace);
+				const real t0 = 1.0f - t1;
+				const real u1 = zTrace - floor(zTrace);
+				const real u0 = 1.0f - u1;
 
-				const int i000 = vxBackgroundField->getIndex(x0, y0, z0);
-				const int i010 = vxBackgroundField->getIndex(x0, y1, z0);
-				const int i100 = vxBackgroundField->getIndex(x1, y0, z0);
-				const int i110 = vxBackgroundField->getIndex(x1, y1, z0);
-				const int i001 = vxBackgroundField->getIndex(x0, y0, z1);
-				const int i011 = vxBackgroundField->getIndex(x0, y1, z1);
-				const int i101 = vxBackgroundField->getIndex(x1, y0, z1);
-				const int i111 = vxBackgroundField->getIndex(x1, y1, z1);
+				const int i000 = vxBackgroundField->getIndexClampBoundary(x0, y0, z0);
+				const int i010 = vxBackgroundField->getIndexClampBoundary(x0, y1, z0);
+				const int i100 = vxBackgroundField->getIndexClampBoundary(x1, y0, z0);
+				const int i110 = vxBackgroundField->getIndexClampBoundary(x1, y1, z0);
+				const int i001 = vxBackgroundField->getIndexClampBoundary(x0, y0, z1);
+				const int i011 = vxBackgroundField->getIndexClampBoundary(x0, y1, z1);
+				const int i101 = vxBackgroundField->getIndexClampBoundary(x1, y0, z1);
+				const int i111 = vxBackgroundField->getIndexClampBoundary(x1, y1, z1);
 
 				vxNew[index] = u0 * (s0 * (t0 * vxInterim[i000] +
 					t1 * vxInterim[i010]) +
@@ -325,60 +310,56 @@ void ThermalSolver::advectVelocitySemiLagrange(real dt,
 		}
 	}
 	// velocity Y
-	for (int z = border; z < resZ - border; z++) {
-		for (int y = border * 2; y < resY - border; y++) {
-			for (int x = border; x < resX - border; x++) {
+	for (int z = 0; z < resZ; z++) {
+		for (int y = 1; y < resY; y++) {
+			for (int x = 0; x < resX; x++) {
 				int index = vyBackgroundField->getIndex(x, y, z);
-				float velx = (
-					vxBackground[vxBackgroundField->getIndexLoopBoundary(x, y - 1, z)] +
+				real velx = (
+					vxBackground[vxBackgroundField->getIndex(x, y - 1, z)] +
 					vxBackground[vxBackgroundField->getIndex(x, y, z)] +
-					vxBackground[vxBackgroundField->getIndexLoopBoundary(x + 1, y - 1, z)] +
-					vxBackground[vxBackgroundField->getIndexLoopBoundary(x + 1, y, z)]) * 0.25f;
-				float vely = vyBackground[index];
-				float velz = (
+					vxBackground[vxBackgroundField->getIndex(x + 1, y - 1, z)] +
+					vxBackground[vxBackgroundField->getIndex(x + 1, y, z)]) * 0.25f;
+				real vely = vyBackground[index];
+				real velz = (
 					vzBackground[vzBackgroundField->getIndex(x, y, z)] +
-					vzBackground[vzBackgroundField->getIndexLoopBoundary(x, y, z + 1)] +
-					vzBackground[vzBackgroundField->getIndexLoopBoundary(x, y - 1, z)] +
-					vzBackground[vzBackgroundField->getIndexLoopBoundary(x, y - 1, z + 1)]) * 0.25f;
+					vzBackground[vzBackgroundField->getIndex(x, y, z + 1)] +
+					vzBackground[vzBackgroundField->getIndex(x, y - 1, z)] +
+					vzBackground[vzBackgroundField->getIndex(x, y - 1, z + 1)]) * 0.25f;
 
 				// backtrace
-				float xTrace = x - (dt / h) * velx;
-				float yTrace = y - (dt / h) * vely;
-				float zTrace = z - (dt / h) * velz;
+				real xTrace = x - (dt / h) * velx;
+				real yTrace = y - (dt / h) * vely;
+				real zTrace = z - (dt / h) * velz;
 
 				// clamp backtrace to grid boundaries
-				if (!loopBoundary) {
-					if (xTrace < 0.5f) xTrace = 0.5f;
-					if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-					if (yTrace < 1.0f) yTrace = 1.0f;
-					if (yTrace > resY - 1.0f) yTrace = resY - 1.0f;
-					if (zTrace < 0.5f) zTrace = 0.5f;
-					if (zTrace > resZ - 1.5) zTrace = resZ - 1.5f;
-				}
+				xTrace = scalarClamp(xTrace, -0.5f, (real)(resX - 0.5f));
+				yTrace = scalarClamp(yTrace, 0.0f, (real)resY);
+				zTrace = scalarClamp(zTrace, -0.5f, (real)(resZ - 0.5f));
 
-				const int x0 = loopIndex(ifloor(xTrace), resX);
-				const int x1 = (x0 + 1) % resX;
-				const int y0 = loopIndex(ifloor(yTrace), resY);
-				const int y1 = (y0 + 1) % resY;
-				const int z0 = loopIndex(ifloor(zTrace), resZ);
-				const int z1 = (z0 + 1) % resZ;
+				// locate neighbors to interpolate
+				const int x0 = ifloor(xTrace);
+				const int x1 = x0 + 1;
+				const int y0 = ifloor(yTrace);
+				const int y1 = y0 + 1;
+				const int z0 = ifloor(zTrace);
+				const int z1 = z0 + 1;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
-				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
-				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
-				const float u0 = 1.0f - u1;
+				const real s1 = xTrace - floor(xTrace);
+				const real s0 = 1.0f - s1;
+				const real t1 = yTrace - floor(yTrace);
+				const real t0 = 1.0f - t1;
+				const real u1 = zTrace - floor(zTrace);
+				const real u0 = 1.0f - u1;
 
-				const int i000 = vyBackgroundField->getIndex(x0, y0, z0);
-				const int i010 = vyBackgroundField->getIndex(x0, y1, z0);
-				const int i100 = vyBackgroundField->getIndex(x1, y0, z0);
-				const int i110 = vyBackgroundField->getIndex(x1, y1, z0);
-				const int i001 = vyBackgroundField->getIndex(x0, y0, z1);
-				const int i011 = vyBackgroundField->getIndex(x0, y1, z1);
-				const int i101 = vyBackgroundField->getIndex(x1, y0, z1);
-				const int i111 = vyBackgroundField->getIndex(x1, y1, z1);
+				const int i000 = vyBackgroundField->getIndexClampBoundary(x0, y0, z0);
+				const int i010 = vyBackgroundField->getIndexClampBoundary(x0, y1, z0);
+				const int i100 = vyBackgroundField->getIndexClampBoundary(x1, y0, z0);
+				const int i110 = vyBackgroundField->getIndexClampBoundary(x1, y1, z0);
+				const int i001 = vyBackgroundField->getIndexClampBoundary(x0, y0, z1);
+				const int i011 = vyBackgroundField->getIndexClampBoundary(x0, y1, z1);
+				const int i101 = vyBackgroundField->getIndexClampBoundary(x1, y0, z1);
+				const int i111 = vyBackgroundField->getIndexClampBoundary(x1, y1, z1);
 
 				// interpolate
 				vyNew[index] = u0 * (s0 * (t0 * vyInterim[i000] +
@@ -393,59 +374,56 @@ void ThermalSolver::advectVelocitySemiLagrange(real dt,
 		}
 	}
 	// velocity Z
-	for (int z = border * 2; z < resZ - border; z++) {
-		for (int y = border; y < resY - border; y++) {
-			for (int x = border; x < resX - border; x++) {
+	for (int z = 1; z < resZ; z++) {
+		for (int y = 0; y < resY; y++) {
+			for (int x = 0; x < resX; x++) {
 				int index = vzBackgroundField->getIndex(x, y, z);
 				real velx = (
-					vxBackground[vxBackgroundField->getIndexLoopBoundary(x, y, z - 1)] +
+					vxBackground[vxBackgroundField->getIndex(x, y, z - 1)] +
 					vxBackground[vxBackgroundField->getIndex(x, y, z)] +
-					vxBackground[vxBackgroundField->getIndexLoopBoundary(x + 1, y, z - 1)] +
-					vxBackground[vxBackgroundField->getIndexLoopBoundary(x + 1, y, z)]) * 0.25f;
+					vxBackground[vxBackgroundField->getIndex(x + 1, y, z - 1)] +
+					vxBackground[vxBackgroundField->getIndex(x + 1, y, z)]) * 0.25f;
 				real vely = (
-					vyBackground[vyBackgroundField->getIndexLoopBoundary(x, y, z - 1)] +
-					vyBackground[vyBackgroundField->getIndexLoopBoundary(x, y + 1, z - 1)] +
+					vyBackground[vyBackgroundField->getIndex(x, y, z - 1)] +
+					vyBackground[vyBackgroundField->getIndex(x, y + 1, z - 1)] +
 					vyBackground[vyBackgroundField->getIndex(x, y, z)] +
-					vyBackground[vyBackgroundField->getIndexLoopBoundary(x, y + 1, z)]) * 0.25f;
+					vyBackground[vyBackgroundField->getIndex(x, y + 1, z)]) * 0.25f;
 				real velz = vzBackground[index];
 
 				// backtrace
-				float xTrace = x - (dt / h) * velx;
-				float yTrace = y - (dt / h) * vely;
-				float zTrace = z - (dt / h) * velz;
+				real xTrace = x - (dt / h) * velx;
+				real yTrace = y - (dt / h) * vely;
+				real zTrace = z - (dt / h) * velz;
 
 				// clamp backtrace to grid boundaries
-				if (!loopBoundary) {
-					if (xTrace < 0.5f) xTrace = 0.5f;
-					if (xTrace > resX - 1.5) xTrace = resX - 1.5f;
-					if (yTrace < 0.5f) yTrace = 0.5f;
-					if (yTrace > resY - 1.5) yTrace = resY - 1.5f;
-					if (zTrace < 1.0f) zTrace = 1.0f;
-					if (zTrace > resZ - 1.0) zTrace = resZ - 1.0f;
-				}
-				const int x0 = loopIndex(ifloor(xTrace), resX);
-				const int x1 = (x0 + 1) % resX;
-				const int y0 = loopIndex(ifloor(yTrace), resY);
-				const int y1 = (y0 + 1) % resY;
-				const int z0 = loopIndex(ifloor(zTrace), resZ);
-				const int z1 = (z0 + 1) % resZ;
+				xTrace = scalarClamp(xTrace, -0.5f, (real)(resX - 0.5f));
+				yTrace = scalarClamp(yTrace, -0.5f, (real)(resY - 0.5f));
+				zTrace = scalarClamp(zTrace, 0.0f, (real)resZ);
+
+				// locate neighbors to interpolate
+				const int x0 = ifloor(xTrace);
+				const int x1 = x0 + 1;
+				const int y0 = ifloor(yTrace);
+				const int y1 = y0 + 1;
+				const int z0 = ifloor(zTrace);
+				const int z1 = z0 + 1;
 
 				// get interpolation weights
-				const float s1 = xTrace - x0;
-				const float s0 = 1.0f - s1;
-				const float t1 = yTrace - y0;
-				const float t0 = 1.0f - t1;
-				const float u1 = zTrace - z0;
-				const float u0 = 1.0f - u1;
+				const real s1 = xTrace - floor(xTrace);
+				const real s0 = 1.0f - s1;
+				const real t1 = yTrace - floor(yTrace);
+				const real t0 = 1.0f - t1;
+				const real u1 = zTrace - floor(zTrace);
+				const real u0 = 1.0f - u1;
 
-				const int i000 = vzBackgroundField->getIndex(x0, y0, z0);
-				const int i010 = vzBackgroundField->getIndex(x0, y1, z0);
-				const int i100 = vzBackgroundField->getIndex(x1, y0, z0);
-				const int i110 = vzBackgroundField->getIndex(x1, y1, z0);
-				const int i001 = vzBackgroundField->getIndex(x0, y0, z1);
-				const int i011 = vzBackgroundField->getIndex(x0, y1, z1);
-				const int i101 = vzBackgroundField->getIndex(x1, y0, z1);
-				const int i111 = vzBackgroundField->getIndex(x1, y1, z1);
+				const int i000 = vzBackgroundField->getIndexClampBoundary(x0, y0, z0);
+				const int i010 = vzBackgroundField->getIndexClampBoundary(x0, y1, z0);
+				const int i100 = vzBackgroundField->getIndexClampBoundary(x1, y0, z0);
+				const int i110 = vzBackgroundField->getIndexClampBoundary(x1, y1, z0);
+				const int i001 = vzBackgroundField->getIndexClampBoundary(x0, y0, z1);
+				const int i011 = vzBackgroundField->getIndexClampBoundary(x0, y1, z1);
+				const int i101 = vzBackgroundField->getIndexClampBoundary(x1, y0, z1);
+				const int i111 = vzBackgroundField->getIndexClampBoundary(x1, y1, z1);
 
 				vzNew[index] = u0 * (s0 * (t0 * vzInterim[i000] +
 					t1 * vzInterim[i010]) +
@@ -458,10 +436,31 @@ void ThermalSolver::advectVelocitySemiLagrange(real dt,
 			}
 		}
 	}
+}
 
-	if (!loopBoundary) return;
-	fillVelocityFieldLoopBoundary(vxNewField, vyNewField, vzNewField);
-
+void ThermalSolver::fillVelocityFieldBorderZero(Field * xF, Field * yF, Field * zF)
+{
+	real* xFc = xF->content;
+	real* yFc = yF->content;
+	real* zFc = zF->content;
+	for (int k = 0; k < resZ; k++) {
+		for (int j = 0; j < resY; j++) {
+			xFc[xF->getIndex(0, j, k)] = 0.0f;
+			xFc[xF->getIndex(resX, j, k)] = 0.0f;
+		}
+	}
+	for (int i = 0; i < resX; i++) {
+		for (int k = 0; k < resZ; k++) {
+			yFc[yF->getIndex(i, 0, k)] = 0.0f;
+			yFc[yF->getIndex(i, resY, k)] = 0.0f;
+		}
+	}
+	for (int i = 0; i < resX; i++) {
+		for (int j = 0; j < resY; j++) {
+			zFc[zF->getIndex(i, j, 0)] = 0.0f;
+			zFc[zF->getIndex(i, j, resZ)] = 0.0f;
+		}
+	}
 }
 
 void ThermalSolver::run(TimeStepController* timeStep)
@@ -504,7 +503,7 @@ void ThermalSolver::run(TimeStepController* timeStep)
 }
 
 ThermalSolver::ThermalSolver(Config * cfg, Field * initRhoField, Field * initVxField, 
-	Field * initVyField, Field * initVzField, Field * initThetaField)
+	Field * initVyField, Field * initVzField)
 {
 	resX = cfg->resX();
 	resY = cfg->resY();
@@ -513,11 +512,14 @@ ThermalSolver::ThermalSolver(Config * cfg, Field * initRhoField, Field * initVxF
 
 	vdwA = cfg->vdwPA();
 	vdwB = cfg->vdwPB();
+	vdwTheta = cfg->vdwTheta();
 	vdwInvWe = 1.0f / cfg->vdwPWE();
 
 	velConvergeTol = cfg->velConvergeTol();
 	rhoConvergeTol = cfg->rhoConvergeTol();
 	rhoRelaxCoef = cfg->rhoRelaxCoef();
+
+	envGravity = cfg->gravity();
 
 	if (initRhoField) rhoField = new Field(initRhoField);
 	else rhoField = new Field(resX, resY, resZ, true);

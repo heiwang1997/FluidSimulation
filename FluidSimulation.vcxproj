@@ -161,6 +161,7 @@
     <ClInclude Include="meta.h" />
     <ClInclude Include="SimpleSolver.h" />
     <ClInclude Include="stdafx.h" />
+    <ClInclude Include="ThermalSolver.h" />
     <ClInclude Include="TimeStepController.h" />
     <ClInclude Include="vec.h" />
   </ItemGroup>
@@ -171,6 +172,7 @@
     <ClCompile Include="io.cpp" />
     <ClCompile Include="SimpleSolver.cpp" />
     <ClCompile Include="stdafx.cpp" />
+    <ClCompile Include="ThermalSolver.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="isothermal.cfg" />

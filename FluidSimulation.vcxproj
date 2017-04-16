@@ -176,6 +176,7 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="isothermal.cfg" />
+    <None Include="thermal.cfg" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

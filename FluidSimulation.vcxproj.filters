@@ -73,5 +73,8 @@
     <None Include="isothermal.cfg">
       <Filter>资源文件</Filter>
     </None>
+    <None Include="thermal.cfg">
+      <Filter>资源文件</Filter>
+    </None>
   </ItemGroup>
 </Project>

@@ -33,9 +33,9 @@ void ThermalSolver::computeVelocityStar(real dt,
 	Field* vStarField[3] = {vxStarField, vyStarField, vzStarField};
 	real* vStarContent[3] = { vxStarField->content, vyStarField->content, vzStarField->content };
 	for (int d = 0; d < 3; ++d) {
-		for (int k = 1; k < resZ; ++k) {
-			for (int j = 1; j < resY; ++j) {
-				for (int i = 1; i < resX; ++i) {
+		for (int k = (d == 2); k < resZ; ++k) {
+			for (int j = (d == 1); j < resY; ++j) {
+				for (int i = (d == 0); i < resX; ++i) {
 					int vIndex = vStarField[d]->getIndex(i, j, k);
 					int centerPlus = rhsRhoField->getIndex(i, j, k);
 					int centerMinus = rhsRhoField->getIndex(i - (d == 0), j - (d == 1), k - (d == 2));
@@ -131,9 +131,9 @@ void ThermalSolver::computeVelocityPrime(real dt,
 	Field* vPrimeField[3] = { vxPrimeField, vyPrimeField, vzPrimeField };
 	real* vPrimeContent[3] = { vxPrimeField->content, vyPrimeField->content, vzPrimeField->content };
 	for (int d = 0; d < 3; ++d) {
-		for (int k = 1; k < resZ; ++k) {
-			for (int j = 1; j < resY; ++j) {
-				for (int i = 1; i < resX; ++i) {
+		for (int k = (d == 2); k < resZ; ++k) {
+			for (int j = (d == 1); j < resY; ++j) {
+				for (int i = (d == 0); i < resX; ++i) {
 					int vIndex = vPrimeField[d]->getIndex(i, j, k);
 					int centerPlus = rhoGuessField->getIndex(i, j, k);
 					int centerMinus = rhoGuessField->getIndex(i - (d == 0), j - (d == 1), k - (d == 2));

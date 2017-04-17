@@ -2,6 +2,17 @@
 #include "Field.h"
 #include <fstream>
 
+real Field::getMax() const
+{
+	real maxVal = std::numeric_limits<real>::min();
+	for (int i = 0; i < totalSize; ++i) {
+		// Make sure no Nan exists.
+		CHECK_EQ(content[i], content[i]);
+		if (content[i] > maxVal) maxVal = content[i];
+	}
+	return maxVal;
+}
+
 void Field::writeSlabPreviewToFile(const std::string& filename, int z /* = -1 */)
 {
 	CHECK_LT(z, sizeZ);

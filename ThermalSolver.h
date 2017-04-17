@@ -27,14 +27,25 @@ protected:
 	real h;
 	real vdwA;
 	real vdwB;
-	real vdwTheta;
 	real vdwInvWe;
+	real vdwCv;
 
 	real velConvergeTol;
 	real rhoConvergeTol;
 	real rhoRelaxCoef;
 
 	real envGravity;
+	real heatDiffuseSpeed;
+	real targetTheta;
+	real heatSpeed;
+
+	// Positions of heaters.
+	int heaterCount;
+	int* heatersX;
+	int* heatersY;
+	int* heatersZ;
+
+	void initializeHeaters();
 
 	// Steps for solving SIMPLE.
 	void computeVelocityStar(real dt, Field* vxGuessField, Field* vyGuessField,
@@ -45,12 +56,16 @@ protected:
 	void computeVelocityPrime(real dt,
 		Field* rhoGuessField, Field* rhsRhoStarField, Field* rhsRhoStarStarField, 
 		Field* vxPrimeField, Field* vyPrimeField, Field* vzPrimeField);
+	void updateThetaField(real dt, Field* vxBackgroundField, Field* vyBackgroundField,
+		Field* vzBackgroundField);
 
 	// Other util functions.
 	void advectVelocitySemiLagrange(real dt,
 		Field * vxBackgroundField, Field * vyBackgroundField, Field * vzBackgroundField,
 		Field * vxInterimField, Field *vyInterimField, Field *vzInterimField,
 		Field * vxNewField, Field * vyNewField, Field * vzNewField);
+	void advectFieldSemiLagrange(real dt, Field *vxField, Field *vyField, Field *vzField,
+		Field *oldField, Field *newField);
 	void fillVelocityFieldBorderZero(Field* xF, Field* yF, Field* zF);
 
 	real updateRhoField(Field* rhoGuess, Field* rhoPrime);
@@ -62,9 +77,10 @@ protected:
 	// void wdRhoOnAlignedGrid(Field* rho, Field* wdRho);
 	// For fast and memory-efficient isothermal manipulation
 	void rhsRhoOnAlignedGrid(Field* rho, Field* rhsRho);
-	inline real isothermalWd(real r) const {
-		return -2 * vdwA * r + vdwTheta * log(r / (vdwB - r)) +
-			vdwTheta * vdwB / (vdwB - r);
+	inline real thermalWd(real r, real t) const {
+		static const real R = 1.0f;
+		return -2 * vdwA * r + R * t * log(r / (vdwB - r)) +
+			R * t * vdwB / (vdwB - r) - vdwCv * t * (log(t) - 1);
 	}
 	inline int ifloor(real x) {
 		return (x > 0) ? (int)x : (int)(x - 1);
@@ -72,7 +88,7 @@ protected:
 public:
 	void run(TimeStepController* step);
 	ThermalSolver(Config* cfg, Field* initRhoField, Field* initVxField,
-		Field* initVyField, Field* initVzField);
+		Field* initVyField, Field* initVzField, Field* initThetaField);
 	void stepSimple(real dt);
 	virtual ~ThermalSolver();
 };

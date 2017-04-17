@@ -44,6 +44,7 @@ public:
 		return i + j * sizeX + k * slabSize;
 	}
 
+	real getMax() const;
 	void writeSlabPreviewToFile(const std::string& filename, int z = -1);
 	void copyFrom(const Field*);
 	void dumpFieldToFile(std::ofstream& fout);

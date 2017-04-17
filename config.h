@@ -27,12 +27,21 @@ public:
 	float vdwLiquidRho() { return cfg_.lookup("vdwFluid.liquidRho"); }
 	float vdwVaporRho() { return cfg_.lookup("vdwFluid.vaporRho"); }
 	float vdwPWE() { return cfg_.lookup("vdwFluid.we"); }
+	float vdwCv() { return cfg_.lookup("vdwFluid.cv"); }
 
 	float velConvergeTol() { return cfg_.lookup("simpleAlgorithm.velocityConvergenceTolerance"); }
 	float rhoConvergeTol() { return cfg_.lookup("simpleAlgorithm.rhoConvergenceTolerance"); }
 	float rhoRelaxCoef() { return cfg_.lookup("simpleAlgorithm.rhoRelaxCoefficient"); }
 
 	float gravity() { return cfg_.lookup("envConstants.gravity"); }
+	float heatDiffuse() { return cfg_.lookup("envConstants.heatDiffuseSpeed"); }
+
+	float startTheta() { return cfg_.lookup("boilingProcess.startTheta"); }
+	float targetTheta() { return cfg_.lookup("boilingProcess.targetTheta"); }
+	float heatSpeed() { return cfg_.lookup("boilingProcess.heatSpeed"); }
+	int heaterIntervalX() { return cfg_.lookup("boilingProcess.heaterPositions.intervalX"); }
+	int heaterIntervalY() { return cfg_.lookup("boilingProcess.heaterPositions.intervalY"); }
+	int heaterIntervalZ() { return cfg_.lookup("boilingProcess.heaterPositions.intervalZ"); }
 
 	std::string fieldOutputDir() { return (const char*)cfg_.lookup("debug.outputDir"); }
 	std::string snapshotOutputDir() { return (const char*)cfg_.lookup("debug.snapshotDir"); }

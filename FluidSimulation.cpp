@@ -11,7 +11,11 @@ const char* defaultConfigFilename = "thermal.cfg";
 
 Field* getInitRhoField(int resX, int resY, int resZ, real dx, real ld, real vd);
 
+Field* getSemiLiquidField(int resX, int resY, int resZ, real ld, real vd, real lperc);
+
 Field* getSingleBubbleRhoField(int resX, int resY, int resZ, real dx, real ld, real vd);
+
+Field* getInitThetaField(int resX, int resY, int resZ, real startTheta);
 
 int main(int argc, char** argv)
 {
@@ -19,7 +23,8 @@ int main(int argc, char** argv)
 	FLAGS_colorlogtostderr = 1;
 	google::InitGoogleLogging((const char*)argv[0]);
 	Config* config;
-	Field* initRhoField = 0, *initVxField = 0, *initVyField = 0, *initVzField = 0;
+	Field* initRhoField = 0, *initVxField = 0, *initVyField = 0, *initVzField = 0,
+		*initThetaField = 0;
 	TimeStepController* timeStep = 0;
 	if (argc <= 2) {
 		if (argc == 1) {
@@ -36,13 +41,22 @@ int main(int argc, char** argv)
 		//initRhoField = getInitRhoField(config->resX(), config->resY(), config->resZ(),
 		//	config->h(), config->vdwLiquidRho(), config->vdwVaporRho());
 
-		initRhoField = getSingleBubbleRhoField(config->resX(), config->resY(), config->resZ(),
-			config->h(), config->vdwLiquidRho(), config->vdwVaporRho());
+		//initRhoField = getSingleBubbleRhoField(config->resX(), config->resY(), config->resZ(),
+		//	config->h(), config->vdwLiquidRho(), config->vdwVaporRho());
+
+		initRhoField = getSemiLiquidField(config->resX(), config->resY(), config->resZ(),
+			config->vdwLiquidRho(), config->vdwVaporRho(), 1.0f);
+
+		initThetaField = getInitThetaField(config->resX(), config->resY(), config->resZ(),
+			config->startTheta());
 
 		timeStep = new TimeStepController(
 			config->totalFrame(), config->gridFPS(), config->gridDt());
 	}
 	else if (argc == 3) {
+		LOG(FATAL) << "Not supported.";
+		return -1;
+
 		config = new Config(argv[1]);
 		initRhoField = new Field(config->resX(), config->resY(), config->resZ());
 		initVxField = new Field(config->resX() + 1, config->resY(), config->resZ());
@@ -61,11 +75,13 @@ int main(int argc, char** argv)
 	//simpleSolver->run(timeStep);
 
 	//delete simpleSolver;
-	ThermalSolver* simpleSolver = new ThermalSolver(config, initRhoField, initVxField, initVyField, initVzField);
-	simpleSolver->run(timeStep);
+	ThermalSolver* thermalSolver = new ThermalSolver(config, initRhoField, 
+		initVxField, initVyField, initVzField, initThetaField);
+	thermalSolver->run(timeStep);
 
-	delete simpleSolver;
+	delete thermalSolver;
 	delete initRhoField;
+	if (initThetaField) delete initThetaField;
 	delete config;
 	delete timeStep;
     return 0;
@@ -117,6 +133,25 @@ Field* getInitRhoField(int resX, int resY, int resZ, real dx, real ld, real vd) 
 	return result;
 }
 
+Field * getSemiLiquidField(int resX, int resY, int resZ, real ld, real vd, real lperc)
+{
+	Field* result = new Field(resX, resY, resZ);
+	real* rho = result->content;
+
+	real interfaceScalingFactor = 200.0f;
+
+	float divPlaneY = lperc * resY;
+
+	for (int z = 0; z < resZ; z++)
+		for (int y = 0; y < resY; y++)
+			for (int x = 0; x < resX; x++)
+			{
+				int index = result->getIndex(x, y, z);
+				rho[index] = vd + (ld - vd) / 2 * (1 + tanh(interfaceScalingFactor * (divPlaneY - y)));
+			}
+	LOG(INFO) << "Initialized with SEMI-LIQUID " << lperc;
+	return result;
+}
 
 Field* getSingleBubbleRhoField(int resX, int resY, int resZ, real dx, real ld, real vd) {
 	Field* result = new Field(resX, resY, resZ);
@@ -151,5 +186,18 @@ Field* getSingleBubbleRhoField(int resX, int resY, int resZ, real dx, real ld, r
 				totalmass += rho[index];
 			}
 	printf("initial total mass: %f\n", totalmass);
+	return result;
+}
+
+Field * getInitThetaField(int resX, int resY, int resZ, real startTheta)
+{
+	Field* result = new Field(resX, resY, resZ);
+	real* theta = result->content;
+
+	int totalCells = resX * resY * resZ;
+	for (int i = 0; i < totalCells; ++i) {
+		theta[i] = startTheta;
+	}
+
 	return result;
 }

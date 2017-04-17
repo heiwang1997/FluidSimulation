@@ -16,7 +16,40 @@ inline T scalarClamp(T target, T lower, T upper) {
 	return target;
 }
 
-void ThermalSolver::computeVelocityStar(real dt, 
+void ThermalSolver::initializeHeaters()
+{
+	heaterCount = 0;
+	// Initialize using intervals
+	int hintvX = config->heaterIntervalX();
+	int hintvZ = config->heaterIntervalZ();
+
+	int hCountX = resX / hintvX - 1;
+	int hCountZ = resZ / hintvZ - 1;
+
+	heaterCount = hCountX * hCountZ;
+	if (hCountX <= 0 || hCountZ <= 0) {
+		heaterCount = 0;
+		LOG(WARNING) << "No heaters detected.";
+		return;
+	}
+	heatersX = new int[heaterCount];
+	heatersY = new int[heaterCount];
+	heatersZ = new int[heaterCount];
+
+	int idx = 0;
+	for (int x = 0; x < hCountX; ++x) {
+		for (int z = 0; z < hCountZ; ++z) {
+			heatersX[idx] = (x + 1) * hintvX;
+			heatersY[idx] = 0;
+			heatersZ[idx] = (z + 1) * hintvZ;
+			++idx;
+		}
+	}
+	CHECK_EQ(idx, heaterCount);
+	LOG(INFO) << heaterCount << " heaters added.";
+}
+
+void ThermalSolver::computeVelocityStar(real dt,
 	Field * vxGuessField, Field * vyGuessField, Field * vzGuessField, 
 	Field * rhoGuessField, Field* rhsRhoField,
 	Field * vxStarField, Field * vyStarField, Field * vzStarField)
@@ -148,6 +181,27 @@ void ThermalSolver::computeVelocityPrime(real dt,
 	}
 }
 
+void ThermalSolver::updateThetaField(real dt, Field * vxBackgroundField, 
+	Field * vyBackgroundField, Field * vzBackgroundField)
+{
+	advectFieldSemiLagrange(dt, vxBackgroundField, vyBackgroundField, vzBackgroundField, 
+		thetaField, thetaField);
+	real* theta = thetaField->content;
+	Field* lapThetaField = new Field(thetaField, false);
+	// This step computes lap_Theta with theta_bar.
+	laplacianFieldOnAlignedGrid(thetaField, lapThetaField);
+	for (int i = 0; i < thetaField->totalSize; ++i) {
+		theta[i] += dt * heatDiffuseSpeed * lapThetaField->content[i];
+	}
+	// Additional heat term is added using splitting.
+	for (int i = 0; i < heaterCount; ++i) {
+		int heaterIndex = thetaField->getIndex(heatersX[i], heatersY[i], heatersZ[i]);
+		theta[heaterIndex] += (1 - exp(- heatSpeed * dt)) * (targetTheta - theta[heaterIndex]);
+	}
+	LOG(INFO) << "Max value in theta field = " << thetaField->getMax();
+	delete lapThetaField;
+}
+
 real ThermalSolver::updateRhoField(Field * rhoGuess, Field * rhoPrime)
 {
 	real delta = 0.0f;
@@ -220,7 +274,7 @@ void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF)
 				int bottom = rF->getIndexClampBoundary(i, j - 1, k);
 				int front = rF->getIndexClampBoundary(i, j, k - 1);
 				int back = rF->getIndexClampBoundary(i, j, k + 1);
-				rhsRho[center] = - isothermalWd(rho[center]);
+				rhsRho[center] = - thermalWd(rho[center], thetaField->content[center]);
 				rhsRho[center] += (vdwInvWe / h / h) * (rho[left] + rho[right] +
 					rho[up] + rho[bottom] + rho[front] + rho[back] -
 					6 * rho[center]);
@@ -438,6 +492,80 @@ void ThermalSolver::advectVelocitySemiLagrange(real dt,
 	}
 }
 
+
+void ThermalSolver::advectFieldSemiLagrange(real dt, Field *vxBackgroundField, 
+	Field *vyBackgroundField, Field *vzBackgroundField,
+	Field *oldField, Field *newField) {
+
+	// Get the content of the fields.
+	real* vx = vxBackgroundField->content;
+	real* vy = vyBackgroundField->content;
+	real* vz = vzBackgroundField->content;
+	real* oldFieldContent = oldField->content;
+	real* newFieldContent = newField->content;
+
+	for (int z = 0; z < resZ; z++) {
+		for (int y = 0; y < resY; y++) {
+			for (int x = 0; x < resX; x++) {
+				int index = newField->getIndex(x, y, z);
+
+				int vxLeftIndex = vxBackgroundField->getIndex(x, y, z);
+				int vxRightIndex = vxBackgroundField->getIndex(x + 1, y, z);
+				real xTrace = x - (dt / h) * (vx[vxLeftIndex] + vx[vxRightIndex]) * 0.5f;
+
+				int vyBelowIndex = vyBackgroundField->getIndex(x, y, z);
+				int vyAboveIndex = vyBackgroundField->getIndex(x, y + 1, z);
+				real yTrace = y - (dt / h) * (vy[vyBelowIndex] + vy[vyAboveIndex]) * 0.5f;
+
+				int vzFrontIndex = vzBackgroundField->getIndex(x, y, z);
+				int vzBackIndex = vzBackgroundField->getIndex(x, y, z + 1);
+				real zTrace = z - (dt / h) * (vz[vzFrontIndex] + vz[vzBackIndex]) * 0.5f;
+
+				// clamp backtrace to grid boundaries
+				xTrace = scalarClamp(xTrace, -0.5f, (real)(resX - 0.5f));
+				yTrace = scalarClamp(yTrace, -0.5f, (real)(resY - 0.5f));
+				zTrace = scalarClamp(zTrace, -0.5f, (real)(resZ - 0.5f));
+
+				// locate neighbors to interpolate
+				const int x0 = ifloor(xTrace);
+				const int x1 = x0 + 1;
+				const int y0 = ifloor(yTrace);
+				const int y1 = y0 + 1;
+				const int z0 = ifloor(zTrace);
+				const int z1 = z0 + 1;
+
+				// get interpolation weights
+				const real s1 = xTrace - floor(xTrace);
+				const real s0 = 1.0f - s1;
+				const real t1 = yTrace - floor(yTrace);
+				const real t0 = 1.0f - t1;
+				const real u1 = zTrace - floor(zTrace);
+				const real u0 = 1.0f - u1;
+
+				const int i000 = oldField->getIndexClampBoundary(x0, y0, z0);
+				const int i010 = oldField->getIndexClampBoundary(x0, y1, z0);
+				const int i100 = oldField->getIndexClampBoundary(x1, y0, z0);
+				const int i110 = oldField->getIndexClampBoundary(x1, y1, z0);
+				const int i001 = oldField->getIndexClampBoundary(x0, y0, z1);
+				const int i011 = oldField->getIndexClampBoundary(x0, y1, z1);
+				const int i101 = oldField->getIndexClampBoundary(x1, y0, z1);
+				const int i111 = oldField->getIndexClampBoundary(x1, y1, z1);
+
+				// interpolates
+				newFieldContent[index] = u0 * (s0 * (t0 * oldFieldContent[i000] +
+					t1 * oldFieldContent[i010]) +
+					s1 * (t0 * oldFieldContent[i100] +
+						t1 * oldFieldContent[i110])) +
+					u1 * (s0 * (t0 * oldFieldContent[i001] +
+						t1 * oldFieldContent[i011]) +
+						s1 * (t0 * oldFieldContent[i101] +
+							t1 * oldFieldContent[i111]));
+
+			}
+		}
+	}
+}
+
 void ThermalSolver::fillVelocityFieldBorderZero(Field * xF, Field * yF, Field * zF)
 {
 	real* xFc = xF->content;
@@ -488,6 +616,7 @@ void ThermalSolver::run(TimeStepController* timeStep)
 			rhoField->writeSlabPreviewToFile(getFieldOutputFilename("rho"));
 			vxField->writeSlabPreviewToFile(getFieldOutputFilename("vx"));
 			vyField->writeSlabPreviewToFile(getFieldOutputFilename("vy"));
+			thetaField->writeSlabPreviewToFile(getFieldOutputFilename("theta"));
 		}
 		// Dump to file every snapshot interval
 		{
@@ -503,7 +632,7 @@ void ThermalSolver::run(TimeStepController* timeStep)
 }
 
 ThermalSolver::ThermalSolver(Config * cfg, Field * initRhoField, Field * initVxField, 
-	Field * initVyField, Field * initVzField)
+	Field * initVyField, Field * initVzField, Field* initThetaField)
 {
 	resX = cfg->resX();
 	resY = cfg->resY();
@@ -512,14 +641,17 @@ ThermalSolver::ThermalSolver(Config * cfg, Field * initRhoField, Field * initVxF
 
 	vdwA = cfg->vdwPA();
 	vdwB = cfg->vdwPB();
-	vdwTheta = cfg->vdwTheta();
 	vdwInvWe = 1.0f / cfg->vdwPWE();
+	vdwCv = cfg->vdwCv();
 
 	velConvergeTol = cfg->velConvergeTol();
 	rhoConvergeTol = cfg->rhoConvergeTol();
 	rhoRelaxCoef = cfg->rhoRelaxCoef();
 
 	envGravity = cfg->gravity();
+	heatDiffuseSpeed = cfg->heatDiffuse();
+	targetTheta = cfg->targetTheta();
+	heatSpeed = cfg->heatSpeed();
 
 	if (initRhoField) rhoField = new Field(initRhoField);
 	else rhoField = new Field(resX, resY, resZ, true);
@@ -533,7 +665,12 @@ ThermalSolver::ThermalSolver(Config * cfg, Field * initRhoField, Field * initVxF
 	if (initVzField) vzField = new Field(initVzField);
 	else vzField = new Field(resX, resY, resZ + 1, true);
 
+	if (initThetaField) thetaField = new Field(initThetaField);
+	else thetaField = new Field(resX, resY, resZ, true);
+
 	config = cfg;
+
+	initializeHeaters();
 }
 
 void ThermalSolver::stepSimple(real dt)
@@ -587,13 +724,10 @@ void ThermalSolver::stepSimple(real dt)
 		}
 		else {
 			if (rhoDelta > lastRhoDelta || velDelta > lastVelDelta) {
-				LOG(WARNING) << "Converge Delta reaches its minimum. Stop iteration";
-				break;
+				LOG(WARNING) << "Converge Delta is larger than previous iteration.";
 			}
-			else {
-				lastRhoDelta = rhoDelta;
-				lastVelDelta = velDelta;
-			}
+			lastRhoDelta = rhoDelta;
+			lastVelDelta = velDelta;
 		}
 	}
 	// Update current fields.
@@ -611,6 +745,9 @@ void ThermalSolver::stepSimple(real dt)
 	delete rhoPrimeField;
 	delete rhsRhoStarField;
 	delete rhsRhoStarStarField;
+
+	// Last step: update temperature.
+	updateThetaField(dt, vxField, vyField, vzField);
 }
 
 ThermalSolver::~ThermalSolver()
@@ -619,4 +756,8 @@ ThermalSolver::~ThermalSolver()
 	delete vxField;
 	delete vyField;
 	delete vzField;
+	delete thetaField;
+	delete[] heatersX;
+	delete[] heatersY;
+	delete[] heatersZ;
 }

@@ -289,15 +289,16 @@ void ThermalSolver::laplacianFieldOnAlignedGrid(Field* f, Field* lapF, real envV
 			}
 		}
 	}
-	CHECK_EQ(useEnvVal, true);
-	real* fieldTopSlice = lapF->topSlice;
-	for (int k = 0; k < resZ; ++k) {
-		for (int i = 0; i < resX; ++i) {
-			int topSliceCenter = lapF->getTopSliceIndex(i, k);
-			int topSliceBottom = f->getIndex(i, resY - 1, k);
-			fieldTopSlice[topSliceCenter] = (fc[topSliceBottom] - envVal) / h / h;
-		}
-	}
+	//if (!useEnvVal) {
+	//	real* fieldTopSlice = lapF->topSlice;
+	//	for (int k = 0; k < resZ; ++k) {
+	//		for (int i = 0; i < resX; ++i) {
+	//			int topSliceCenter = lapF->getTopSliceIndex(i, k);
+	//			int topSliceBottom = f->getIndex(i, resY - 1, k);
+	//			fieldTopSlice[topSliceCenter] = (fc[topSliceBottom] - envVal) / h / h;
+	//		}
+	//	}
+	//}
 }
 
 void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF, real envRho, real envTheta)
@@ -565,7 +566,6 @@ void ThermalSolver::advectFieldSemiLagrange(real dt, Field *vxBackgroundField,
 	
 	// If envValue != nan, USE ENV.
 	bool useEnvValue = (envValue == envValue);
-	std::cout << useEnvValue << std::endl;
 
 	for (int z = 0; z < resZ; z++) {
 		for (int y = 0; y < resY; y++) {

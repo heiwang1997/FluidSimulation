@@ -18,6 +18,22 @@ inline T scalarClamp(T target, T lower, T upper) {
 
 void ThermalSolver::initializeHeaters()
 {
+	heaterCount = resX * resZ;
+	heatersX = new int[heaterCount];
+	heatersY = new int[heaterCount];
+	heatersZ = new int[heaterCount];
+
+	int idx = 0;
+	for (int x = 0; x < resX; ++x) {
+		for (int z = 0; z < resZ; ++z) {
+			heatersX[idx] = x;
+			heatersY[idx] = 0;
+			heatersZ[idx] = z;
+			++idx;
+		}
+	}
+	/*
+
 	heaterCount = 0;
 	// Initialize using intervals
 	int hintvX = config->heaterIntervalX();
@@ -28,9 +44,9 @@ void ThermalSolver::initializeHeaters()
 
 	heaterCount = hCountX * hCountZ;
 	if (hCountX <= 0 || hCountZ <= 0) {
-		heaterCount = 0;
-		LOG(WARNING) << "No heaters detected.";
-		return;
+	heaterCount = 0;
+	LOG(WARNING) << "No heaters detected.";
+	return;
 	}
 	heatersX = new int[heaterCount];
 	heatersY = new int[heaterCount];
@@ -38,13 +54,15 @@ void ThermalSolver::initializeHeaters()
 
 	int idx = 0;
 	for (int x = 0; x < hCountX; ++x) {
-		for (int z = 0; z < hCountZ; ++z) {
-			heatersX[idx] = (x + 1) * hintvX;
-			heatersY[idx] = 0;
-			heatersZ[idx] = (z + 1) * hintvZ;
-			++idx;
-		}
+	for (int z = 0; z < hCountZ; ++z) {
+	heatersX[idx] = (x + 1) * hintvX;
+	heatersY[idx] = 0;
+	heatersZ[idx] = (z + 1) * hintvZ;
+	++idx;
 	}
+	}
+	
+	*/
 	CHECK_EQ(idx, heaterCount);
 	LOG(INFO) << heaterCount << " heaters added.";
 }
@@ -196,9 +214,9 @@ void ThermalSolver::updateThetaField(real dt, Field * vxBackgroundField,
 	// Additional heat term is added using splitting.
 	for (int i = 0; i < heaterCount; ++i) {
 		int heaterIndex = thetaField->getIndex(heatersX[i], heatersY[i], heatersZ[i]);
-		theta[heaterIndex] += (1 - exp(- heatSpeed * dt)) * (targetTheta - theta[heaterIndex]);
+		// theta[heaterIndex] += (1 - exp(- heatSpeed * dt)) * (targetTheta - theta[heaterIndex]);
+		theta[heaterIndex] = targetTheta;
 	}
-	LOG(INFO) << "Max value in theta field = " << thetaField->getMax();
 	delete lapThetaField;
 }
 

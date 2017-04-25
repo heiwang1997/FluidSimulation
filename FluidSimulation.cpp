@@ -6,6 +6,7 @@
 #include "SimpleSolver.h"
 #include "ThermalSolver.h"
 #include "TimeStepController.h"
+#include <direct.h>
 
 const char* defaultConfigFilename = "thermal.cfg";
 
@@ -71,6 +72,19 @@ int main(int argc, char** argv)
 		return 1;
 	}
 	
+	// Copy configuration file into Snapshot folder.
+	{
+		std::string baseFolder = config->snapshotOutputDir() + "/" + config->runName() + "/";
+		_mkdir(baseFolder.c_str());
+		std::string configFilename = baseFolder + "config.cfg";
+		std::ifstream src(config->filename, std::ios::binary);
+		std::ofstream dst(configFilename, std::ios::binary);
+		dst << src.rdbuf();
+		src.close();
+		dst.close();
+		LOG(INFO) << "Configuration file copied to " << configFilename;
+	}
+
 	//SimpleSolver* simpleSolver = new SimpleSolver(config, initRhoField, initVxField, initVyField, initVzField);
 	//simpleSolver->run(timeStep);
 

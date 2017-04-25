@@ -9,6 +9,8 @@ class Config {
 public:
 	Config(std::string filename);
 	~Config();
+
+	std::string filename;
 	// Getters begin
 	std::string runName() { return (const char*)cfg_.lookup("runName"); }
 

@@ -12,6 +12,7 @@
 
 
 Config::Config(std::string filename) {
+	this->filename = filename;
 	try {
 		cfg_.readFile(filename.c_str());
 	} catch (libconfig::FileIOException e) {

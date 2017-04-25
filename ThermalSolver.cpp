@@ -9,6 +9,8 @@
 #include "Field.h"
 #include <direct.h>
 
+// const real ThermalSolver::extraoplateLength = 4.0f;
+
 template<class T>
 inline T scalarClamp(T target, T lower, T upper) {
 	if (target > upper) return upper;
@@ -80,18 +82,19 @@ void ThermalSolver::computeVelocityStar(real dt,
 
 	// Second Step:
 	// Euler forward u* = u1 + grad(rhs(rho_guess)) * dt
-	rhsRhoOnAlignedGrid(rhoGuessField, rhsRhoField);
+	rhsRhoOnAlignedGrid(rhoGuessField, rhsRhoField, environmentRho, environmentTheta);
+
 	Field* vStarField[3] = {vxStarField, vyStarField, vzStarField};
 	real* vStarContent[3] = { vxStarField->content, vyStarField->content, vzStarField->content };
 	for (int d = 0; d < 3; ++d) {
 		for (int k = (d == 2); k < resZ; ++k) {
-			for (int j = (d == 1); j < resY; ++j) {
+			for (int j = (d == 1); j < resY + (d == 1); ++j) {
 				for (int i = (d == 0); i < resX; ++i) {
 					int vIndex = vStarField[d]->getIndex(i, j, k);
-					int centerPlus = rhsRhoField->getIndex(i, j, k);
+					real rhsPlus = (j == resY) ? rhsRhoField->topSlice[rhsRhoField->getTopSliceIndex(i, k)] :
+						rhsRhoField->content[rhsRhoField->getIndex(i, j, k)];
 					int centerMinus = rhsRhoField->getIndex(i - (d == 0), j - (d == 1), k - (d == 2));
-					vStarContent[d][vIndex] += (dt / h) * (rhsRhoField->content[centerPlus] -
-						rhsRhoField->content[centerMinus]);
+					vStarContent[d][vIndex] += (dt / h) * (rhsPlus - rhsRhoField->content[centerMinus]);
 					// Add gravity at y axis.
 					if (d == 1) {
 						vStarContent[d][vIndex] -= envGravity * dt;
@@ -176,21 +179,29 @@ void ThermalSolver::computeVelocityPrime(real dt,
 	Field * vxPrimeField, Field * vyPrimeField, Field * vzPrimeField)
 {
 	// Fill v' border with zero.
+	// Top open boundary will be reset.
 	fillVelocityFieldBorderZero(vxPrimeField, vyPrimeField, vzPrimeField);
 
-	rhsRhoOnAlignedGrid(rhoGuessField, rhsRhoStarStarField);
+	rhsRhoOnAlignedGrid(rhoGuessField, rhsRhoStarStarField, environmentRho, environmentTheta);
 	Field* vPrimeField[3] = { vxPrimeField, vyPrimeField, vzPrimeField };
 	real* vPrimeContent[3] = { vxPrimeField->content, vyPrimeField->content, vzPrimeField->content };
 	for (int d = 0; d < 3; ++d) {
 		for (int k = (d == 2); k < resZ; ++k) {
-			for (int j = (d == 1); j < resY; ++j) {
+			for (int j = (d == 1); j < resY + (d == 1); ++j) {
 				for (int i = (d == 0); i < resX; ++i) {
 					int vIndex = vPrimeField[d]->getIndex(i, j, k);
-					int centerPlus = rhoGuessField->getIndex(i, j, k);
+					int topSliceIdx = rhsRhoStarField->getTopSliceIndex(i, k);
+					int centerPlus = (j == resY) ? -1 : rhsRhoStarField->getIndex(i, j, k);
+
+					real rhsRhoStarStarPlus = (j == resY) ? rhsRhoStarStarField->topSlice[topSliceIdx] :
+						rhsRhoStarStarField->content[centerPlus];
+					real rhsRhoStarPlus = (j == resY) ? rhsRhoStarField->topSlice[topSliceIdx] :
+						rhsRhoStarField->content[centerPlus];
+
 					int centerMinus = rhoGuessField->getIndex(i - (d == 0), j - (d == 1), k - (d == 2));
-					vPrimeContent[d][vIndex] = (dt / h) * (rhsRhoStarStarField->content[centerPlus] -
+					vPrimeContent[d][vIndex] = (dt / h) * (rhsRhoStarStarPlus -
 						rhsRhoStarStarField->content[centerMinus]);
-					vPrimeContent[d][vIndex] -= (dt / h) * (rhsRhoStarField->content[centerPlus] -
+					vPrimeContent[d][vIndex] -= (dt / h) * (rhsRhoStarPlus -
 						rhsRhoStarField->content[centerMinus]);
 					// The gravity term cancels.
 				}
@@ -203,11 +214,11 @@ void ThermalSolver::updateThetaField(real dt, Field * vxBackgroundField,
 	Field * vyBackgroundField, Field * vzBackgroundField)
 {
 	advectFieldSemiLagrange(dt, vxBackgroundField, vyBackgroundField, vzBackgroundField, 
-		thetaField, thetaField);
+		thetaField, thetaField, environmentTheta);
 	real* theta = thetaField->content;
 	Field* lapThetaField = new Field(thetaField, false);
 	// This step computes lap_Theta with theta_bar.
-	laplacianFieldOnAlignedGrid(thetaField, lapThetaField);
+	laplacianFieldOnAlignedGrid(thetaField, lapThetaField, environmentTheta);
 	for (int i = 0; i < thetaField->totalSize; ++i) {
 		theta[i] += dt * heatDiffuseSpeed * lapThetaField->content[i];
 	}
@@ -256,10 +267,11 @@ real ThermalSolver::updateVelocityField(Field * vxStarField, Field * vyStarField
 	return delta;
 }
 
-void ThermalSolver::laplacianFieldOnAlignedGrid(Field* f, Field* lapF)
+void ThermalSolver::laplacianFieldOnAlignedGrid(Field* f, Field* lapF, real envVal)
 {
 	real* fc = f->content;
 	real* lapFc = lapF->content;
+	bool useEnvVal = (envVal == envVal);
 	for (int k = 0; k < resZ; ++ k) {
 		for (int j = 0; j < resY; ++ j) {
 			for (int i = 0; i < resX; ++ i) {
@@ -270,18 +282,30 @@ void ThermalSolver::laplacianFieldOnAlignedGrid(Field* f, Field* lapF)
 				int bottom = f->getIndexClampBoundary(i, j - 1, k);
 				int front = f->getIndexClampBoundary(i, j, k - 1);
 				int back = f->getIndexClampBoundary(i, j, k + 1);
+				real fcUp = useEnvVal ? envVal : fc[up];
 				lapFc[center] = (fc[left] + fc[right] +
-					fc[up] + fc[bottom] + fc[front] + fc[back] - 
+					fcUp + fc[bottom] + fc[front] + fc[back] - 
 					6 * fc[center]) / h / h;
 			}
 		}
 	}
+	CHECK_EQ(useEnvVal, true);
+	real* fieldTopSlice = lapF->topSlice;
+	for (int k = 0; k < resZ; ++k) {
+		for (int i = 0; i < resX; ++i) {
+			int topSliceCenter = lapF->getTopSliceIndex(i, k);
+			int topSliceBottom = f->getIndex(i, resY - 1, k);
+			fieldTopSlice[topSliceCenter] = (fc[topSliceBottom] - envVal) / h / h;
+		}
+	}
 }
 
-void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF)
+void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF, real envRho, real envTheta)
 {
 	real* rho = rF->content;
 	real* rhsRho = rhsRF->content;
+	bool useEnvRho = (envRho == envRho);
+
 	for (int k = 0; k < resZ; ++k) {
 		for (int j = 0; j < resY; ++j) {
 			for (int i = 0; i < resX; ++i) {
@@ -292,11 +316,23 @@ void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF)
 				int bottom = rF->getIndexClampBoundary(i, j - 1, k);
 				int front = rF->getIndexClampBoundary(i, j, k - 1);
 				int back = rF->getIndexClampBoundary(i, j, k + 1);
+				real rhoUp = useEnvRho ? envRho : rho[up];
 				rhsRho[center] = - thermalWd(rho[center], thetaField->content[center]);
 				rhsRho[center] += (vdwInvWe / h / h) * (rho[left] + rho[right] +
-					rho[up] + rho[bottom] + rho[front] + rho[back] -
+					rhoUp + rho[bottom] + rho[front] + rho[back] -
 					6 * rho[center]);
 			}
+		}
+	}
+
+	CHECK_EQ(useEnvRho, true);
+	real* rhsRhoTopSlice = rhsRF->topSlice;
+	for (int k = 0; k < resZ; ++k) {
+		for (int i = 0; i < resX; ++i) {
+			int topSliceCenter = rhsRF->getTopSliceIndex(i, k);
+			int topSliceBottom = rF->getIndex(i, resY - 1, k);
+			rhsRhoTopSlice[topSliceCenter] = -thermalWd(envRho, envTheta);
+			rhsRhoTopSlice[topSliceCenter] += (vdwInvWe / h / h) * (rho[topSliceBottom] - envRho);
 		}
 	}
 }
@@ -316,6 +352,7 @@ void ThermalSolver::advectVelocitySemiLagrange(real dt,
 	real* vyNew = vyNewField->content; 
 	real* vzNew = vzNewField->content;
 	// Fill the velocity at solid still boundaries
+	// The open boundary at the top will be fixed below.
 	fillVelocityFieldBorderZero(vxNewField, vyNewField, vzNewField);
 	// velocity X
 	for (int z = 0; z < resZ; z++) {
@@ -338,6 +375,9 @@ void ThermalSolver::advectVelocitySemiLagrange(real dt,
 				real xTrace = x - (dt / h) * velx;
 				real yTrace = y - (dt / h) * vely;
 				real zTrace = z - (dt / h) * velz;
+
+				// Detect y coord is at open boundary, true if obo > 0.
+				// real openBoundaryOverflow = yTrace - (real)(resY - 1.0f);
 
 				// clamp backtrace to grid boundaries
 				xTrace = scalarClamp(xTrace, 0.0f, (real)resX);
@@ -382,19 +422,20 @@ void ThermalSolver::advectVelocitySemiLagrange(real dt,
 		}
 	}
 	// velocity Y
+	// Note: modified for open boundary.
 	for (int z = 0; z < resZ; z++) {
-		for (int y = 1; y < resY; y++) {
+		for (int y = 1; y /* < */ <= resY; y++) {
 			for (int x = 0; x < resX; x++) {
 				int index = vyBackgroundField->getIndex(x, y, z);
 				real velx = (
 					vxBackground[vxBackgroundField->getIndex(x, y - 1, z)] +
-					vxBackground[vxBackgroundField->getIndex(x, y, z)] +
+					vxBackground[vxBackgroundField->getIndexClampBoundary(x, y, z)] +
 					vxBackground[vxBackgroundField->getIndex(x + 1, y - 1, z)] +
-					vxBackground[vxBackgroundField->getIndex(x + 1, y, z)]) * 0.25f;
+					vxBackground[vxBackgroundField->getIndexClampBoundary(x + 1, y, z)]) * 0.25f;
 				real vely = vyBackground[index];
 				real velz = (
-					vzBackground[vzBackgroundField->getIndex(x, y, z)] +
-					vzBackground[vzBackgroundField->getIndex(x, y, z + 1)] +
+					vzBackground[vzBackgroundField->getIndexClampBoundary(x, y, z)] +
+					vzBackground[vzBackgroundField->getIndexClampBoundary(x, y, z + 1)] +
 					vzBackground[vzBackgroundField->getIndex(x, y - 1, z)] +
 					vzBackground[vzBackgroundField->getIndex(x, y - 1, z + 1)]) * 0.25f;
 
@@ -513,7 +554,7 @@ void ThermalSolver::advectVelocitySemiLagrange(real dt,
 
 void ThermalSolver::advectFieldSemiLagrange(real dt, Field *vxBackgroundField, 
 	Field *vyBackgroundField, Field *vzBackgroundField,
-	Field *oldField, Field *newField) {
+	Field *oldField, Field *newField, real envValue) {
 
 	// Get the content of the fields.
 	real* vx = vxBackgroundField->content;
@@ -521,6 +562,10 @@ void ThermalSolver::advectFieldSemiLagrange(real dt, Field *vxBackgroundField,
 	real* vz = vzBackgroundField->content;
 	real* oldFieldContent = oldField->content;
 	real* newFieldContent = newField->content;
+	
+	// If envValue != nan, USE ENV.
+	bool useEnvValue = (envValue == envValue);
+	std::cout << useEnvValue << std::endl;
 
 	for (int z = 0; z < resZ; z++) {
 		for (int y = 0; y < resY; y++) {
@@ -538,6 +583,12 @@ void ThermalSolver::advectFieldSemiLagrange(real dt, Field *vxBackgroundField,
 				int vzFrontIndex = vzBackgroundField->getIndex(x, y, z);
 				int vzBackIndex = vzBackgroundField->getIndex(x, y, z + 1);
 				real zTrace = z - (dt / h) * (vz[vzFrontIndex] + vz[vzBackIndex]) * 0.5f;
+
+				if (useEnvValue && yTrace > (real)(resY - 0.5f)) {
+					// Clamp x, z and give y.
+					newFieldContent[index] = envValue;
+					continue;
+				}
 
 				// clamp backtrace to grid boundaries
 				xTrace = scalarClamp(xTrace, -0.5f, (real)(resX - 0.5f));
@@ -671,6 +722,9 @@ ThermalSolver::ThermalSolver(Config * cfg, Field * initRhoField, Field * initVxF
 	targetTheta = cfg->targetTheta();
 	heatSpeed = cfg->heatSpeed();
 
+	environmentRho = cfg->vdwVaporRho();
+	environmentTheta = cfg->startTheta();
+
 	if (initRhoField) rhoField = new Field(initRhoField);
 	else rhoField = new Field(resX, resY, resZ, true);
 
@@ -704,7 +758,9 @@ void ThermalSolver::stepSimple(real dt)
 	Field* rhoPrimeField = new Field(rhoField, false);
 	// For rhoStarField.
 	Field* rhsRhoStarField = new Field(rhoField, false);
+	rhsRhoStarField->initTopSlice();
 	Field* rhsRhoStarStarField = new Field(rhoField, false);
+	rhsRhoStarStarField->initTopSlice();
 
 	int loopCount = 0;
 	real lastRhoDelta = std::numeric_limits<real>::max();

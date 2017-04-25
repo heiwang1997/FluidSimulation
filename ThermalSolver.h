@@ -45,6 +45,11 @@ protected:
 	int* heatersY;
 	int* heatersZ;
 
+	// Extrapolate Coef.
+	// static const float extraoplateLength;
+	real environmentRho;
+	real environmentTheta;
+
 	void initializeHeaters();
 
 	// Steps for solving SIMPLE.
@@ -65,7 +70,7 @@ protected:
 		Field * vxInterimField, Field *vyInterimField, Field *vzInterimField,
 		Field * vxNewField, Field * vyNewField, Field * vzNewField);
 	void advectFieldSemiLagrange(real dt, Field *vxField, Field *vyField, Field *vzField,
-		Field *oldField, Field *newField);
+		Field *oldField, Field *newField, real envValue);
 	void fillVelocityFieldBorderZero(Field* xF, Field* yF, Field* zF);
 
 	real updateRhoField(Field* rhoGuess, Field* rhoPrime);
@@ -73,10 +78,10 @@ protected:
 		Field* vxPrimeField, Field* vyPrimeField, Field* vzPrimeField, 
 		Field* vxGuessField, Field* vyGuessField, Field* vzGuessField);
 	// Grid-dependent computation
-	void laplacianFieldOnAlignedGrid(Field* f, Field* lapF);
+	void laplacianFieldOnAlignedGrid(Field* f, Field* lapF, real envVal);
 	// void wdRhoOnAlignedGrid(Field* rho, Field* wdRho);
 	// For fast and memory-efficient isothermal manipulation
-	void rhsRhoOnAlignedGrid(Field* rho, Field* rhsRho);
+	void rhsRhoOnAlignedGrid(Field* rho, Field* rhsRho, real envRho, real envTheta);
 	inline real thermalWd(real r, real t) const {
 		static const real R = 1.0f;
 		return -2 * vdwA * r + R * t * log(r / (vdwB - r)) +

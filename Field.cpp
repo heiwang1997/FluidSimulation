@@ -47,6 +47,11 @@ void Field::loadFiledFromFile(std::ifstream & fin)
 	fin.read((char*)this->content, sizeof(real) * totalSize);
 }
 
+void Field::initTopSlice()
+{
+	topSlice = new real[sizeX * sizeZ];
+}
+
 Field::Field(int sx, int sy, int sz, bool clear /* = false */)
 	: sizeX(sx), sizeY(sy), sizeZ(sz), slabSize(sx * sy), totalSize(sx * sy * sz)
 {
@@ -54,6 +59,7 @@ Field::Field(int sx, int sy, int sz, bool clear /* = false */)
 	if (clear) {
 		memset(content, 0, sizeof(real) * totalSize);
 	}
+	topSlice = 0;
 }
 
 Field::Field(const Field &f)
@@ -62,6 +68,7 @@ Field::Field(const Field &f)
 {
 	content = new real[totalSize];
 	memcpy(content, f.content, sizeof(real) * totalSize);
+	topSlice = 0;
 }
 
 Field::Field(const Field *f, bool copy /* = true */)
@@ -70,9 +77,11 @@ Field::Field(const Field *f, bool copy /* = true */)
 {
 	content = new real[totalSize];
 	if (copy) memcpy(content, f->content, sizeof(real) * totalSize);
+	topSlice = 0;
 }
 
 Field::~Field()
 {
 	delete[] content;
+	if (topSlice) delete[] topSlice;
 }

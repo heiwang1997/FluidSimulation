@@ -11,7 +11,10 @@ public:
 	const int sizeY;
 	const int sizeZ;
 	const int totalSize;
+
 	real* content;
+	real* topSlice;
+
 	inline int getIndex(int i, int j, int k) const {
 #ifdef CHECK_FIELD_INDEX
 		CHECK_GE(i, 0); CHECK_LT(i, sizeX);
@@ -49,6 +52,17 @@ public:
 	void copyFrom(const Field*);
 	void dumpFieldToFile(std::ofstream& fout);
 	void loadFiledFromFile(std::ifstream& fin);
+	
+	void initTopSlice();
+	inline int getTopSliceIndex(int i, int k) const {
+#ifdef CHECK_FIELD_INDEX
+		CHECK_NOTNULL(topSlice);
+		CHECK_GE(i, 0); CHECK_LT(i, sizeX);
+		CHECK_GE(k, 0); CHECK_LT(k, sizeZ);
+#endif // CHECK_FIELD_INDEX
+		return i + k * sizeX;
+	}
+	
 	Field(int sx, int sy, int sz, bool clear = false);
 	Field(const Field&);
 	Field(const Field*, bool copy = true);

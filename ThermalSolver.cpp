@@ -2,6 +2,7 @@
 #include <ctime>
 #include <climits>
 #include <Eigen/Sparse>
+#include <Eigen/Dense>
 #include "io.h"
 #include "ThermalSolver.h"
 #include "TimeStepController.h"
@@ -10,6 +11,7 @@
 #include <direct.h>
 
 // const real ThermalSolver::extraoplateLength = 4.0f;
+const real ThermalSolver::R = 1.0f;
 
 template<class T>
 inline T scalarClamp(T target, T lower, T upper) {
@@ -210,24 +212,128 @@ void ThermalSolver::computeVelocityPrime(real dt,
 	}
 }
 
-void ThermalSolver::updateThetaField(real dt, Field * vxBackgroundField, 
-	Field * vyBackgroundField, Field * vzBackgroundField)
+void ThermalSolver::updateThetaField(real dt, Field * vxGuessField, 
+	Field * vyGuessField, Field * vzGuessField, Field* rhoGuessField)
 {
-	advectFieldSemiLagrange(dt, vxBackgroundField, vyBackgroundField, vzBackgroundField, 
-		thetaField, thetaField, environmentTheta);
-	real* theta = thetaField->content;
-	Field* lapThetaField = new Field(thetaField, false);
+	// Solve Dtheta/Dt = 0
+	advectFieldSemiLagrange(dt, vxGuessField, vyGuessField, vzGuessField, 
+		thetaField, thetaGuessField, environmentTheta);
+
+	Field* lapThetaField = new Field(thetaGuessField, false);
 	// This step computes lap_Theta with theta_bar.
-	laplacianFieldOnAlignedGrid(thetaField, lapThetaField, environmentTheta);
-	for (int i = 0; i < thetaField->totalSize; ++i) {
-		theta[i] += dt * heatDiffuseSpeed * lapThetaField->content[i];
+	laplacianFieldOnAlignedGrid(thetaGuessField, lapThetaField, environmentTheta);
+
+	real* vx = vxGuessField->content;
+	real* vy = vyGuessField->content;
+	real* vz = vzGuessField->content;
+	real* rho = rhoGuessField->content;
+	real* theta = thetaGuessField->content;
+	real* lapTheta = lapThetaField->content;
+	// Simple aliasing.
+	Field* vxF = vxGuessField, *vyF = vyGuessField, *vzF = vzGuessField;
+
+	// Get pressure, this enables the 'microPi' optimization, which may save 2 * field space.
+	Field* tempPressure = new Field(rhoGuessField, false);
+	real* pressure = tempPressure->content;
+	for (int k = 0; k < resZ; ++k) {
+		for (int j = 0; j < resY; ++j) {
+			for (int i = 0; i < resX; ++i) {
+				int index = tempPressure->getIndex(i, j, k);
+				pressure[index] = vdwEqState(rho[index], theta[index]);
+			}
+		}
 	}
+
+	for (int k = 0; k < resZ; ++k) {
+		for (int j = 0; j < resY; ++j) {
+			for (int i = 0; i < resX; ++i) {
+				int index = thetaGuessField->getIndex(i, j, k);
+				int left = thetaGuessField->getIndexClampBoundary(i - 1, j, k);
+				int right = thetaGuessField->getIndexClampBoundary(i + 1, j, k);
+				int up = thetaGuessField->getIndexClampBoundary(i, j + 1, k);
+				int down = thetaGuessField->getIndexClampBoundary(i, j - 1, k);
+				int front = thetaGuessField->getIndexClampBoundary(i, j, k - 1);
+				int back = thetaGuessField->getIndexClampBoundary(i, j, k + 1);
+				real rhoUp = (j == resY - 1) ? environmentRho : rho[up];
+
+				Eigen::Vector3f gradRho;
+				gradRho << (rho[right] - rho[left]) / (2 * h),
+					(rhoUp - rho[down]) / (2 * h),
+					(rho[back] - rho[front]) / (2 * h);
+
+				Eigen::Matrix3f kortewegTensor = vdwInvWe * (
+					(rho[index] * lapTheta[index] + 
+						0.5 * gradRho.squaredNorm()) * Eigen::MatrixXf::Identity(3, 3) -
+					gradRho * gradRho.transpose());
+
+				Eigen::Matrix3f cauchyTensor =
+					-pressure[index] * Eigen::MatrixXf::Identity(3, 3) +
+					kortewegTensor;
+
+				// grad u is a tensor
+				Eigen::Matrix3f gradVelocity;
+				gradVelocity << (vx[vxF->getIndex(i + 1, j, k)] - vx[vxF->getIndex(i, j, k)]) / h,
+					(vx[vxF->getIndexClampBoundary(i, j + 1, k)] + vx[vxF->getIndexClampBoundary(i + 1, j + 1, k)] 
+						- vx[vxF->getIndexClampBoundary(i, j - 1, k)] - vx[vxF->getIndexClampBoundary(i + 1, j - 1, k)]) / (4 * h),
+					(vx[vxF->getIndexClampBoundary(i, j, k + 1)] + vx[vxF->getIndexClampBoundary(i + 1, j, k + 1)]
+						- vx[vxF->getIndexClampBoundary(i, j, k - 1)] - vx[vxF->getIndexClampBoundary(i + 1, j, k - 1)]) / (4 * h),
+					(vy[vyF->getIndexClampBoundary(i + 1, j, k)] + vy[vyF->getIndexClampBoundary(i + 1, j + 1, k)]
+						- vy[vyF->getIndexClampBoundary(i - 1, j, k)] - vy[vyF->getIndexClampBoundary(i - 1, j + 1, k)]) / (4 * h),
+					(vy[vyF->getIndex(i, j + 1, k)] - vy[vyF->getIndex(i, j, k)]) / h,
+					(vy[vyF->getIndexClampBoundary(i, j, k + 1)] + vy[vyF->getIndexClampBoundary(i, j + 1, k + 1)]
+						- vy[vyF->getIndexClampBoundary(i, j, k - 1)] - vy[vyF->getIndexClampBoundary(i, j + 1, k - 1)]) / (4 * h),
+					(vz[vzF->getIndexClampBoundary(i + 1, j, k)] + vz[vzF->getIndexClampBoundary(i + 1, j, k + 1)]
+						- vz[vzF->getIndexClampBoundary(i - 1, j, k)]- vz[vzF->getIndexClampBoundary(i - 1, j, k + 1)]) / (4 * h),
+					(vz[vzF->getIndexClampBoundary(i, j + 1, k)] + vz[vzF->getIndexClampBoundary(i, j + 1, k + 1)]
+						- vz[vzF->getIndexClampBoundary(i, j - 1, k)] - vz[vzF->getIndexClampBoundary(i, j - 1, k + 1)]) / (4 * h),
+					(vz[vzF->getIndex(i, j, k + 1)] - vz[vzF->getIndex(i, j, k)]) / h;
+
+				// div u is a scalar
+				real divVelocity = gradVelocity.trace();
+
+				Eigen::Vector3f microPi = vdwInvWe * rho[index] * divVelocity * gradRho;
+				// MicroPi is added to element needed it.
+				if (i >= 1) theta[left] += 0.5f * (dt / h) * (-microPi[0]) / (rho[left] * vdwCv);
+				if (i < resX - 1) theta[right] -= 0.5f * (dt / h) * (-microPi[0]) / (rho[right] * vdwCv);
+				if (j >= 1) theta[down] += 0.5f * (dt / h) * (-microPi[1]) / (rho[down] * vdwCv);
+				if (j < resY - 1) theta[up] -= 0.5f * (dt / h) * (-microPi[1]) / (rho[up] * vdwCv);
+				if (k >= 1) theta[front] += 0.5f * (dt / h) * (-microPi[2]) / (rho[front] * vdwCv);
+				if (k < resZ - 1) theta[back] -= 0.5f * (dt / h) * (-microPi[2]) / (rho[back] * vdwCv);
+				// For boundary elements, updates are missed, get them back here.
+				real centerCoef = 0.5f * (dt / h) / (rho[index] * vdwCv);
+				if (i == 0) theta[index] -= centerCoef * (-microPi[0]);
+				if (i == resX - 1) theta[index] += centerCoef * (-microPi[0]);
+				if (j == 0) theta[index] -= centerCoef * (-microPi[1]);
+				if (j == resY - 1) {
+					// MicroPi at (i, resY, k), divVelocity is same due to extrapolation.
+					real microPi1 = vdwInvWe * environmentRho * divVelocity * 
+						(environmentRho - rho[index]) / (2 * h);
+					theta[index] += centerCoef * (-microPi1);
+				}
+				if (k == 0) theta[index] -= centerCoef * (-microPi[2]);
+				if (k == resZ - 1) theta[index] += centerCoef * (-microPi[2]);
+
+				theta[index] += dt * ((- vdwA / vdwCv * rho[index] * divVelocity) + 
+					((cauchyTensor.cwiseProduct(gradVelocity.transpose()).sum()) + 
+						heatDiffuseSpeed * lapThetaField->content[i]) / (rho[index] * vdwCv));
+			}
+		}
+	}
+
 	// Additional heat term is added using splitting.
 	for (int i = 0; i < heaterCount; ++i) {
 		int heaterIndex = thetaField->getIndex(heatersX[i], heatersY[i], heatersZ[i]);
 		// theta[heaterIndex] += (1 - exp(- heatSpeed * dt)) * (targetTheta - theta[heaterIndex]);
 		theta[heaterIndex] = targetTheta;
 	}
+	/*
+	------------ BELOW: NOT APPLICABLE ANY MORE -------------------
+	for (int i = 0; i < thetaField->totalSize; ++i) {
+		theta[i] += dt * heatDiffuseSpeed * lapThetaField->content[i];
+	}
+	------------ ABOVE: NOT APPLICABLE ANY MORE -------------------
+	*/
+	delete tempPressure;
 	delete lapThetaField;
 }
 
@@ -282,7 +388,7 @@ void ThermalSolver::laplacianFieldOnAlignedGrid(Field* f, Field* lapF, real envV
 				int bottom = f->getIndexClampBoundary(i, j - 1, k);
 				int front = f->getIndexClampBoundary(i, j, k - 1);
 				int back = f->getIndexClampBoundary(i, j, k + 1);
-				real fcUp = useEnvVal ? envVal : fc[up];
+				real fcUp = (useEnvVal && (j == resY - 1)) ? envVal : fc[up];
 				lapFc[center] = (fc[left] + fc[right] +
 					fcUp + fc[bottom] + fc[front] + fc[back] - 
 					6 * fc[center]) / h / h;
@@ -317,8 +423,8 @@ void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF, real envRho, 
 				int bottom = rF->getIndexClampBoundary(i, j - 1, k);
 				int front = rF->getIndexClampBoundary(i, j, k - 1);
 				int back = rF->getIndexClampBoundary(i, j, k + 1);
-				real rhoUp = useEnvRho ? envRho : rho[up];
-				rhsRho[center] = - thermalWd(rho[center], thetaField->content[center]);
+				real rhoUp = (useEnvRho && (j == resY - 1)) ? envRho : rho[up];
+				rhsRho[center] = - thermalWd(rho[center], thetaGuessField->content[center]);
 				rhsRho[center] += (vdwInvWe / h / h) * (rho[left] + rho[right] +
 					rhoUp + rho[bottom] + rho[front] + rho[back] -
 					6 * rho[center]);
@@ -751,6 +857,7 @@ void ThermalSolver::stepSimple(real dt)
 	Field* vyGuessField = new Field(vyField);
 	Field* vzGuessField = new Field(vzField);
 	Field* rhoGuessField = new Field(rhoField);
+	thetaGuessField = new Field(thetaField);
 	// For vStarField.
 	Field* vxStarField = new Field(vxField, false);
 	Field* vyStarField = new Field(vyField, false);
@@ -791,7 +898,9 @@ void ThermalSolver::stepSimple(real dt)
 		delete vxPrimeField;
 		delete vyPrimeField;
 		delete vzPrimeField;
-
+		// 5. Assemble T* using u**, rho** (Guess fields here)
+		updateThetaField(dt, vxGuessField, vyGuessField, vzGuessField, rhoGuessField);
+		// 6. Converge judgement
 		LOG(INFO) << "Rho diff = " << rhoDelta << ", Velocity diff = " << velDelta;
 		if (rhoDelta < rhoConvergeTol && velDelta < velConvergeTol) {
 			break;
@@ -813,6 +922,7 @@ void ThermalSolver::stepSimple(real dt)
 	delete vyGuessField;
 	delete vzGuessField;
 	delete rhoGuessField;
+	delete thetaGuessField;
 	delete vxStarField;
 	delete vyStarField;
 	delete vzStarField;
@@ -821,7 +931,7 @@ void ThermalSolver::stepSimple(real dt)
 	delete rhsRhoStarStarField;
 
 	// Last step: update temperature.
-	updateThetaField(dt, vxField, vyField, vzField);
+	// updateThetaField(dt, vxField, vyField, vzField);
 }
 
 ThermalSolver::~ThermalSolver()

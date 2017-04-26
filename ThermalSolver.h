@@ -10,11 +10,15 @@ class TimeStepController;
 class ThermalSolver
 {
 protected:
+	static const real R;
+
 	Field* rhoField;
 	Field* vxField;
 	Field* vyField;
 	Field* vzField;
 	Field* thetaField;
+	// Mints.
+	Field* thetaGuessField;
 
 	Config* config;
 	// Staggered Grid Size
@@ -61,8 +65,8 @@ protected:
 	void computeVelocityPrime(real dt,
 		Field* rhoGuessField, Field* rhsRhoStarField, Field* rhsRhoStarStarField, 
 		Field* vxPrimeField, Field* vyPrimeField, Field* vzPrimeField);
-	void updateThetaField(real dt, Field* vxBackgroundField, Field* vyBackgroundField,
-		Field* vzBackgroundField);
+	void updateThetaField(real dt, Field * vxGuessField,
+		Field * vyGuessField, Field * vzGuessField, Field* rhoGuessField);
 
 	// Other util functions.
 	void advectVelocitySemiLagrange(real dt,
@@ -83,9 +87,11 @@ protected:
 	// For fast and memory-efficient isothermal manipulation
 	void rhsRhoOnAlignedGrid(Field* rho, Field* rhsRho, real envRho, real envTheta);
 	inline real thermalWd(real r, real t) const {
-		static const real R = 1.0f;
 		return -2 * vdwA * r + R * t * log(r / (vdwB - r)) +
 			R * t * vdwB / (vdwB - r) - vdwCv * t * (log(t) - 1);
+	}
+	inline real vdwEqState(real rho, real theta) const {
+		return R * vdwB * rho * theta / (vdwB - rho) - vdwA * rho * rho;
 	}
 	inline int ifloor(real x) {
 		return (x > 0) ? (int)x : (int)(x - 1);

@@ -13,6 +13,17 @@ real Field::getMax() const
 	return maxVal;
 }
 
+real Field::getMin() const
+{
+	real minVal = std::numeric_limits<real>::max();
+	for (int i = 0; i < totalSize; ++i) {
+		// Make sure no Nan exists.
+		CHECK_EQ(content[i], content[i]);
+		if (content[i] < minVal) minVal = content[i];
+	}
+	return minVal;
+}
+
 void Field::writeSlabPreviewToFile(const std::string& filename, int z /* = -1 */)
 {
 	CHECK_LT(z, sizeZ);

@@ -51,8 +51,8 @@ protected:
 
 	// Extrapolate Coef.
 	// static const float extraoplateLength;
-	real environmentRho;
-	real environmentTheta;
+	// real environmentRho;
+	// real environmentTheta;
 
 	void initializeHeaters();
 

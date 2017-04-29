@@ -42,11 +42,11 @@ int main(int argc, char** argv)
 		//initRhoField = getInitRhoField(config->resX(), config->resY(), config->resZ(),
 		//	config->h(), config->vdwLiquidRho(), config->vdwVaporRho());
 
-		//initRhoField = getSingleBubbleRhoField(config->resX(), config->resY(), config->resZ(),
-		//	config->h(), config->vdwLiquidRho(), config->vdwVaporRho());
+		initRhoField = getSingleBubbleRhoField(config->resX(), config->resY(), config->resZ(),
+			config->h(), config->vdwLiquidRho(), config->vdwVaporRho());
 
-		initRhoField = getSemiLiquidField(config->resX(), config->resY(), config->resZ(),
-			config->vdwLiquidRho(), config->vdwVaporRho(), 1.0f);
+		//initRhoField = getSemiLiquidField(config->resX(), config->resY(), config->resZ(),
+		//	config->vdwLiquidRho(), config->vdwVaporRho(), 0.85f);
 
 		initThetaField = getInitThetaField(config->resX(), config->resY(), config->resZ(),
 			config->startTheta());
@@ -152,7 +152,7 @@ Field * getSemiLiquidField(int resX, int resY, int resZ, real ld, real vd, real 
 	Field* result = new Field(resX, resY, resZ);
 	real* rho = result->content;
 
-	real interfaceScalingFactor = 200.0f;
+	real interfaceScalingFactor = 0.6f;
 
 	float divPlaneY = lperc * resY;
 
@@ -181,7 +181,7 @@ Field* getSingleBubbleRhoField(int resX, int resY, int resZ, real dx, real ld, r
 	double totalmass = 0;
 
 	real liquidDensity = ld, vaporDensity = vd;
-	real interfaceScalingFactor = 200.0f;
+	real interfaceScalingFactor = 100.0f;
 
 	bool regularizedInterface = true;
 

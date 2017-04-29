@@ -48,6 +48,7 @@ public:
 	}
 
 	real getMax() const;
+	real getMin() const;
 	void writeSlabPreviewToFile(const std::string& filename, int z = -1);
 	void copyFrom(const Field*);
 	void dumpFieldToFile(std::ofstream& fout);

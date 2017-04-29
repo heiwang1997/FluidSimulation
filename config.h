@@ -37,6 +37,7 @@ public:
 
 	float gravity() { return cfg_.lookup("envConstants.gravity"); }
 	float heatDiffuse() { return cfg_.lookup("envConstants.heatDiffuseSpeed"); }
+	float envRho() { return cfg_.lookup("envConstants.rho"); }
 
 	float startTheta() { return cfg_.lookup("boilingProcess.startTheta"); }
 	float targetTheta() { return cfg_.lookup("boilingProcess.targetTheta"); }

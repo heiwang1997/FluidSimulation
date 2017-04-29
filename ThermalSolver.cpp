@@ -879,7 +879,7 @@ ThermalSolver::ThermalSolver(Config * cfg, Field * initRhoField, Field * initVxF
 	targetTheta = cfg->targetTheta();
 	heatSpeed = cfg->heatSpeed();
 
-	environmentRho = cfg->vdwVaporRho();
+	environmentRho = cfg->envRho();
 	environmentTheta = cfg->startTheta();
 
 	if (initRhoField) rhoField = new Field(initRhoField);

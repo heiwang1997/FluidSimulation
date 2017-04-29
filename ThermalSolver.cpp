@@ -86,7 +86,7 @@ void ThermalSolver::computeVelocityStar(real dt,
 
 	// Second Step:
 	// Euler forward u* = u1 + grad(rhs(rho_guess)) * dt
-	rhsRhoOnAlignedGrid(rhoGuessField, rhsRhoField, 0.0f, 0.0f);
+	rhsRhoOnAlignedGrid(rhoGuessField, rhsRhoField, environmentRho, environmentTheta);
 
 	Field* vStarField[3] = {vxStarField, vyStarField, vzStarField};
 	real* vStarContent[3] = { vxStarField->content, vyStarField->content, vzStarField->content };
@@ -186,7 +186,7 @@ void ThermalSolver::computeVelocityPrime(real dt,
 	// Top open boundary will be reset.
 	fillVelocityFieldBorderZero(vxPrimeField, vyPrimeField, vzPrimeField);
 
-	rhsRhoOnAlignedGrid(rhoGuessField, rhsRhoStarStarField, 0.0f, 0.0f);
+	rhsRhoOnAlignedGrid(rhoGuessField, rhsRhoStarStarField, environmentRho, environmentTheta);
 	Field* vPrimeField[3] = { vxPrimeField, vyPrimeField, vzPrimeField };
 	real* vPrimeContent[3] = { vxPrimeField->content, vyPrimeField->content, vzPrimeField->content };
 	for (int d = 0; d < 3; ++d) {
@@ -219,7 +219,7 @@ void ThermalSolver::updateThetaField(real dt, Field * vxGuessField,
 {
 	// Solve Dtheta/Dt = 0
 	advectFieldSemiLagrange(dt, vxGuessField, vyGuessField, vzGuessField, 
-		thetaField, thetaGuessField, 0.0f);
+		thetaField, thetaGuessField, environmentTheta);
 
 	Field* lapThetaField = new Field(thetaGuessField, false);
 	// This step computes lap_Theta with theta_bar.
@@ -261,11 +261,11 @@ void ThermalSolver::updateThetaField(real dt, Field * vxGuessField,
 				int down = thetaGuessField->getIndexClampBoundary(i, j - 1, k);
 				int front = thetaGuessField->getIndexClampBoundary(i, j, k - 1);
 				int back = thetaGuessField->getIndexClampBoundary(i, j, k + 1);
-				// real rhoUp = (j == resY - 1) ? environmentRho : rho[up];
+				real rhoUp = (j == resY - 1) ? environmentRho : rho[up];
 
 				Eigen::Vector3f gradRho;
 				gradRho << (rho[right] - rho[left]) / (2 * h),
-					(rho[up] - rho[down]) / (2 * h),
+					(rhoUp - rho[down]) / (2 * h),
 					(rho[back] - rho[front]) / (2 * h);
 				// TODO!
 				Eigen::Matrix3f kortewegTensor = vdwInvWe * (
@@ -321,10 +321,10 @@ void ThermalSolver::updateThetaField(real dt, Field * vxGuessField,
 				if (j == 0) theta[index] -= centerCoef * (-microPi[1]);
 				if (j == resY - 1) {
 					// MicroPi at (i, resY, k), divVelocity is same due to extrapolation.
-					//real microPi1 = vdwInvWe * environmentRho * divVelocity * 
-					//	(environmentRho - rho[index]) / (2 * h);
-					//theta[index] += centerCoef * (-microPi1);
-					theta[index] += centerCoef * (-microPi[1]);
+					real microPi1 = vdwInvWe * environmentRho * divVelocity * 
+						(environmentRho - rho[index]) / (2 * h);
+					theta[index] += centerCoef * (-microPi1);
+					//theta[index] += centerCoef * (-microPi[1]);
 				}
 				if (k == 0) theta[index] -= centerCoef * (-microPi[2]);
 				if (k == resZ - 1) theta[index] += centerCoef * (-microPi[2]);
@@ -430,7 +430,7 @@ void ThermalSolver::laplacianFieldOnAlignedGrid(Field* f, Field* lapF, real envV
 {
 	real* fc = f->content;
 	real* lapFc = lapF->content;
-	bool useEnvVal = false;
+	bool useEnvVal = true;
 	for (int k = 0; k < resZ; ++ k) {
 		for (int j = 0; j < resY; ++ j) {
 			for (int i = 0; i < resX; ++ i) {
@@ -454,7 +454,7 @@ void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF, real envRho, 
 {
 	real* rho = rF->content;
 	real* rhsRho = rhsRF->content;
-	bool useEnvRho = false;
+	bool useEnvRho = true;
 
 	for (int k = 0; k < resZ; ++k) {
 		for (int j = 0; j < resY; ++j) {
@@ -480,13 +480,8 @@ void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF, real envRho, 
 		for (int i = 0; i < resX; ++i) {
 			int topSliceCenter = rhsRF->getTopSliceIndex(i, k);
 			int topSliceBottom = rF->getIndex(i, resY - 1, k);
-			int expLeft = rF->getIndexClampBoundary(i - 1, resY - 1, k);
-			int expRight = rF->getIndexClampBoundary(i + 1, resY - 1, k);
-			int expFront = rF->getIndexClampBoundary(i, resY - 1, k - 1);
-			int expBack = rF->getIndexClampBoundary(i, resY - 1, k + 1);
-			rhsRhoTopSlice[topSliceCenter] = -thermalWd(rho[topSliceBottom], thetaGuessField->content[topSliceBottom]);
-			rhsRhoTopSlice[topSliceCenter] += (vdwInvWe / h / h) * 
-				(rho[expLeft] + rho[expRight] + rho[expFront] + rho[expBack] - 4 * rho[topSliceBottom]);
+			rhsRhoTopSlice[topSliceCenter] = -thermalWd(envRho, envTheta);
+			rhsRhoTopSlice[topSliceCenter] += (vdwInvWe / h / h) * (rho[topSliceBottom] - envRho);
 		}
 	}
 
@@ -727,7 +722,7 @@ void ThermalSolver::advectFieldSemiLagrange(real dt, Field *vxBackgroundField,
 	real* newFieldContent = newField->content;
 	
 	// If envValue != nan, USE ENV.
-	bool useEnvValue = false;
+	bool useEnvValue = true;
 
 	for (int z = 0; z < resZ; z++) {
 		for (int y = 0; y < resY; y++) {
@@ -884,8 +879,8 @@ ThermalSolver::ThermalSolver(Config * cfg, Field * initRhoField, Field * initVxF
 	targetTheta = cfg->targetTheta();
 	heatSpeed = cfg->heatSpeed();
 
-	// environmentRho = cfg->vdwVaporRho();
-	// environmentTheta = cfg->startTheta();
+	environmentRho = cfg->vdwVaporRho();
+	environmentTheta = cfg->startTheta();
 
 	if (initRhoField) rhoField = new Field(initRhoField);
 	else rhoField = new Field(resX, resY, resZ, true);

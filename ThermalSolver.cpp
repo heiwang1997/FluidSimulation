@@ -223,15 +223,15 @@ void ThermalSolver::updateThetaField(real dt, Field * vxGuessField,
 
 	Field* lapThetaField = new Field(thetaGuessField, false);
 	// This step computes lap_Theta with theta_bar.
-	laplacianFieldOnAlignedGrid(thetaGuessField, lapThetaField, 0.0f);
+	laplacianFieldOnAlignedGrid(thetaGuessField, lapThetaField, environmentTheta);
 
 	real* theta = thetaGuessField->content;
 	real* lapTheta = lapThetaField->content;
 
 #ifdef USE_ENERGY_MODEL
 	Field* lapRhoField = new Field(rhoGuessField, false);
-	laplacianFieldOnAlignedGrid(rhoGuessField, lapRhoField, 0.0f);
-
+	laplacianFieldOnAlignedGrid(rhoGuessField, lapRhoField, environmentRho);
+	`
 	real* vx = vxGuessField->content;
 	real* vy = vyGuessField->content;
 	real* vz = vzGuessField->content;

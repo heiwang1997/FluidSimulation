@@ -13,7 +13,8 @@
 //#define USE_ENERGY_MODEL
 
 // const real ThermalSolver::extraoplateLength = 4.0f;
-const real ThermalSolver::R = 1.0f;
+// When a = b = 1.0f, this guarantees everthing is dimensionless.
+const real ThermalSolver::R = (8.0f / 27.0f);
 
 template<class T>
 inline T scalarClamp(T target, T lower, T upper) {
@@ -24,6 +25,8 @@ inline T scalarClamp(T target, T lower, T upper) {
 
 void ThermalSolver::initializeHeaters()
 {
+	LOG(WARNING) << "In this version, no heaters would be added!";
+	return;
 	heaterCount = resX * resZ;
 	heatersX = new int[heaterCount];
 	heatersY = new int[heaterCount];
@@ -92,15 +95,16 @@ void ThermalSolver::computeVelocityStar(real dt,
 	real* vStarContent[3] = { vxStarField->content, vyStarField->content, vzStarField->content };
 	for (int d = 0; d < 3; ++d) {
 		for (int k = (d == 2); k < resZ; ++k) {
-			for (int j = (d == 1); j < resY + (d == 1); ++j) {
+			for (int j = (d == 1); j < resY /*+ (d == 1)*/; ++j) {
 				for (int i = (d == 0); i < resX; ++i) {
 					int vIndex = vStarField[d]->getIndex(i, j, k);
-					real rhsPlus = (j == resY) ? rhsRhoField->topSlice[rhsRhoField->getTopSliceIndex(i, k)] :
-						rhsRhoField->content[rhsRhoField->getIndex(i, j, k)];
+					//real rhsPlus = (j == resY) ? rhsRhoField->topSlice[rhsRhoField->getTopSliceIndex(i, k)] :
+					//	rhsRhoField->content[rhsRhoField->getIndex(i, j, k)];
+					real rhsPlus = rhsRhoField->content[rhsRhoField->getIndex(i, j, k)];
 					int centerMinus = rhsRhoField->getIndex(i - (d == 0), j - (d == 1), k - (d == 2));
 					vStarContent[d][vIndex] += (dt / h) * (rhsPlus - rhsRhoField->content[centerMinus]);
 					// Add gravity at y axis.
-					if (d == 1 && (j != resY)) {
+					if (d == 1) {
 						vStarContent[d][vIndex] -= envGravity * dt;
 					}
 				}
@@ -191,16 +195,18 @@ void ThermalSolver::computeVelocityPrime(real dt,
 	real* vPrimeContent[3] = { vxPrimeField->content, vyPrimeField->content, vzPrimeField->content };
 	for (int d = 0; d < 3; ++d) {
 		for (int k = (d == 2); k < resZ; ++k) {
-			for (int j = (d == 1); j < resY + (d == 1); ++j) {
+			for (int j = (d == 1); j < resY /*+ (d == 1)*/; ++j) {
 				for (int i = (d == 0); i < resX; ++i) {
 					int vIndex = vPrimeField[d]->getIndex(i, j, k);
-					int topSliceIdx = rhsRhoStarField->getTopSliceIndex(i, k);
+					// int topSliceIdx = rhsRhoStarField->getTopSliceIndex(i, k);
 					int centerPlus = (j == resY) ? -1 : rhsRhoStarField->getIndex(i, j, k);
 
-					real rhsRhoStarStarPlus = (j == resY) ? rhsRhoStarStarField->topSlice[topSliceIdx] :
-						rhsRhoStarStarField->content[centerPlus];
-					real rhsRhoStarPlus = (j == resY) ? rhsRhoStarField->topSlice[topSliceIdx] :
-						rhsRhoStarField->content[centerPlus];
+					//real rhsRhoStarStarPlus = (j == resY) ? rhsRhoStarStarField->topSlice[topSliceIdx] :
+					//	rhsRhoStarStarField->content[centerPlus];
+					//real rhsRhoStarPlus = (j == resY) ? rhsRhoStarField->topSlice[topSliceIdx] :
+					//	rhsRhoStarField->content[centerPlus];
+					real rhsRhoStarStarPlus = rhsRhoStarStarField->content[centerPlus];
+					real rhsRhoStarPlus = rhsRhoStarField->content[centerPlus];
 
 					int centerMinus = rhoGuessField->getIndex(i - (d == 0), j - (d == 1), k - (d == 2));
 					vPrimeContent[d][vIndex] = (dt / h) * (rhsRhoStarStarPlus -
@@ -218,15 +224,15 @@ void ThermalSolver::updateThetaField(real dt, Field * vxGuessField,
 	Field * vyGuessField, Field * vzGuessField, Field* rhoGuessField)
 {
 	// Solve Dtheta/Dt = 0
-	advectFieldSemiLagrange(dt, vxGuessField, vyGuessField, vzGuessField, 
-		thetaField, thetaGuessField, 0.0f);
+	advectThetaFieldSemiLagrange(dt, vxGuessField, vyGuessField, vzGuessField, 
+		thetaField, thetaGuessField);
 
-	Field* lapThetaField = new Field(thetaGuessField, false);
+	// Field* lapThetaField = new Field(thetaGuessField, false);
 	// This step computes lap_Theta with theta_bar.
-	laplacianFieldOnAlignedGrid(thetaGuessField, lapThetaField, 0.0f);
+	// laplacianThetaOnAlignedGrid(thetaGuessField, lapThetaField);
 
 	real* theta = thetaGuessField->content;
-	real* lapTheta = lapThetaField->content;
+	// real* lapTheta = lapThetaField->content;
 
 #ifdef USE_ENERGY_MODEL
 	Field* lapRhoField = new Field(rhoGuessField, false);
@@ -374,20 +380,49 @@ void ThermalSolver::updateThetaField(real dt, Field * vxGuessField,
 	delete tempPressure;
 	delete lapRhoField;
 #else
-	for (int i = 0; i < thetaField->totalSize; ++i) {
-		theta[i] += dt * heatDiffuseSpeed * lapThetaField->content[i];
+
+	Field* oldThetaField = new Field(thetaGuessField, true);
+	real* oldTheta = oldThetaField->content;
+	real* rhoGuess = rhoGuessField->content;
+
+	for (int k = 0; k < resZ; ++k) {
+		for (int j = 0; j < resY; ++j) {
+			for (int i = 0; i < resX; ++i) {
+				int center = oldThetaField->getIndex(i, j, k);
+				int left = oldThetaField->getIndexClampBoundary(i - 1, j, k);
+				int right = oldThetaField->getIndexClampBoundary(i + 1, j, k);
+				int up = oldThetaField->getIndexClampBoundary(i, j + 1, k);
+				int bottom = oldThetaField->getIndexClampBoundary(i, j - 1, k);
+				int front = oldThetaField->getIndexClampBoundary(i, j, k - 1);
+				int back = oldThetaField->getIndexClampBoundary(i, j, k + 1);
+				real fcUp = (j == resY - 1) ? environmentTheta : oldTheta[up];
+				real fcBottom = (j == 0) ? bottomHeaterField->content[
+					bottomHeaterField->getIndex(i, 0, k)] : oldTheta[bottom];
+
+				real lapHere = (oldTheta[left] + oldTheta[right] +
+					fcUp + fcBottom + oldTheta[front] + oldTheta[back] -
+					6 * oldTheta[center]) / h / h;
+				real partialsHere = ((rhoGuess[right] - rhoGuess[left]) * (oldTheta[right] - oldTheta[left]) +
+					(rhoGuess[up] - rhoGuess[bottom]) * (fcUp - fcBottom) +
+					(rhoGuess[back] - rhoGuess[front]) * (oldTheta[back] - oldTheta[front])) / (4 * h * h);
+				theta[center] += dt * heatDiffuseSpeed * (lapHere * rhoGuess[center] + partialsHere);
+
+			}
+		}
 	}
-	// Additional heat term is added using splitting.
+
 	for (int i = 0; i < heaterCount; ++i) {
 		int heaterIndex = thetaField->getIndex(heatersX[i], heatersY[i], heatersZ[i]);
-		theta[heaterIndex] += (1 - exp(- heatSpeed * dt)) * (targetTheta - theta[heaterIndex]);
+		theta[heaterIndex] += (1 - exp(- heatSpeed * dt)) * (targetTheta - oldTheta[heaterIndex]);
 		// theta[heaterIndex] = targetTheta;
 	}
+
+	delete oldThetaField;
 #endif // USE_ENERGY_MODEL
 	LOG(INFO) << "Field after update: MAX = " << thetaGuessField->getMax() <<
 		", MIN = " << thetaGuessField->getMin();
 
-	delete lapThetaField;
+	// delete lapThetaField;
 }
 
 real ThermalSolver::updateRhoField(Field * rhoGuess, Field * rhoPrime)
@@ -450,6 +485,30 @@ void ThermalSolver::laplacianFieldOnAlignedGrid(Field* f, Field* lapF, real envV
 	}
 }
 
+// Use Ju Liu Boundary condition.
+void ThermalSolver::laplacianThetaOnAlignedGrid(Field* t, Field* lapT) {
+	real* fc = t->content;
+	real* lapFc = lapT->content;
+	for (int k = 0; k < resZ; ++k) {
+		for (int j = 0; j < resY; ++j) {
+			for (int i = 0; i < resX; ++i) {
+				int center = t->getIndex(i, j, k);
+				int left = t->getIndexClampBoundary(i - 1, j, k);
+				int right = t->getIndexClampBoundary(i + 1, j, k);
+				int up = t->getIndexClampBoundary(i, j + 1, k);
+				int bottom = t->getIndexClampBoundary(i, j - 1, k);
+				int front = t->getIndexClampBoundary(i, j, k - 1);
+				int back = t->getIndexClampBoundary(i, j, k + 1);
+				real fcUp = (j == resY - 1) ? environmentTheta : fc[up];
+				real fcBottom = (j == 0) ? targetTheta : fc[bottom];
+				lapFc[center] = (fc[left] + fc[right] +
+					fcUp + fcBottom + fc[front] + fc[back] -
+					6 * fc[center]) / h / h;
+			}
+		}
+	}
+}
+
 void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF, real envRho, real envTheta)
 {
 	real* rho = rF->content;
@@ -475,20 +534,20 @@ void ThermalSolver::rhsRhoOnAlignedGrid(Field * rF, Field * rhsRF, real envRho, 
 		}
 	}
 
-	real* rhsRhoTopSlice = rhsRF->topSlice;
-	for (int k = 0; k < resZ; ++k) {
-		for (int i = 0; i < resX; ++i) {
-			int topSliceCenter = rhsRF->getTopSliceIndex(i, k);
-			int topSliceBottom = rF->getIndex(i, resY - 1, k);
-			int expLeft = rF->getIndexClampBoundary(i - 1, resY - 1, k);
-			int expRight = rF->getIndexClampBoundary(i + 1, resY - 1, k);
-			int expFront = rF->getIndexClampBoundary(i, resY - 1, k - 1);
-			int expBack = rF->getIndexClampBoundary(i, resY - 1, k + 1);
-			rhsRhoTopSlice[topSliceCenter] = -thermalWd(rho[topSliceBottom], thetaGuessField->content[topSliceBottom]);
-			rhsRhoTopSlice[topSliceCenter] += (vdwInvWe / h / h) * 
-				(rho[expLeft] + rho[expRight] + rho[expFront] + rho[expBack] - 4 * rho[topSliceBottom]);
-		}
-	}
+	//real* rhsRhoTopSlice = rhsRF->topSlice;
+	//for (int k = 0; k < resZ; ++k) {
+	//	for (int i = 0; i < resX; ++i) {
+	//		int topSliceCenter = rhsRF->getTopSliceIndex(i, k);
+	//		int topSliceBottom = rF->getIndex(i, resY - 1, k);
+	//		int expLeft = rF->getIndexClampBoundary(i - 1, resY - 1, k);
+	//		int expRight = rF->getIndexClampBoundary(i + 1, resY - 1, k);
+	//		int expFront = rF->getIndexClampBoundary(i, resY - 1, k - 1);
+	//		int expBack = rF->getIndexClampBoundary(i, resY - 1, k + 1);
+	//		rhsRhoTopSlice[topSliceCenter] = -thermalWd(rho[topSliceBottom], thetaGuessField->content[topSliceBottom]);
+	//		rhsRhoTopSlice[topSliceCenter] += (vdwInvWe / h / h) * 
+	//			(rho[expLeft] + rho[expRight] + rho[expFront] + rho[expBack] - 4 * rho[topSliceBottom]);
+	//	}
+	//}
 
 	// std::cout << rhsRho[rhsRF->getIndex(64, 127, 16)] << ' ' << rhsRhoTopSlice[rhsRF->getTopSliceIndex(64, 16)] << std::endl;
 }
@@ -580,7 +639,7 @@ void ThermalSolver::advectVelocitySemiLagrange(real dt,
 	// velocity Y
 	// Note: modified for open boundary.
 	for (int z = 0; z < resZ; z++) {
-		for (int y = 1; y /* < */ <= resY; y++) {
+		for (int y = 1; y /* < */ < resY; y++) {
 			for (int x = 0; x < resX; x++) {
 				int index = vyBackgroundField->getIndex(x, y, z);
 				real velx = (
@@ -715,9 +774,9 @@ void ThermalSolver::advectVelocitySemiLagrange(real dt,
 }
 
 
-void ThermalSolver::advectFieldSemiLagrange(real dt, Field *vxBackgroundField, 
+void ThermalSolver::advectThetaFieldSemiLagrange(real dt, Field *vxBackgroundField,
 	Field *vyBackgroundField, Field *vzBackgroundField,
-	Field *oldField, Field *newField, real envValue) {
+	Field *oldField, Field *newField) {
 
 	// Get the content of the fields.
 	real* vx = vxBackgroundField->content;
@@ -725,9 +784,6 @@ void ThermalSolver::advectFieldSemiLagrange(real dt, Field *vxBackgroundField,
 	real* vz = vzBackgroundField->content;
 	real* oldFieldContent = oldField->content;
 	real* newFieldContent = newField->content;
-	
-	// If envValue != nan, USE ENV.
-	bool useEnvValue = false;
 
 	for (int z = 0; z < resZ; z++) {
 		for (int y = 0; y < resY; y++) {
@@ -746,9 +802,17 @@ void ThermalSolver::advectFieldSemiLagrange(real dt, Field *vxBackgroundField,
 				int vzBackIndex = vzBackgroundField->getIndex(x, y, z + 1);
 				real zTrace = z - (dt / h) * (vz[vzFrontIndex] + vz[vzBackIndex]) * 0.5f;
 
-				if (useEnvValue && yTrace > (real)(resY - 0.5f)) {
+				// Approx here.
+				if (yTrace > (real)(resY - 0.5f)) {
 					// Clamp x, z and give y.
-					newFieldContent[index] = envValue;
+					newFieldContent[index] = environmentTheta;
+					continue;
+				}
+				else if (yTrace < -0.5f) {
+					// TODO: Make it more standard.
+					newFieldContent[index] = 
+						bottomHeaterField->content[bottomHeaterField->
+						getIndexClampBoundary(ifloor(xTrace), 0, ifloor(zTrace))];
 					continue;
 				}
 
@@ -884,8 +948,25 @@ ThermalSolver::ThermalSolver(Config * cfg, Field * initRhoField, Field * initVxF
 	targetTheta = cfg->targetTheta();
 	heatSpeed = cfg->heatSpeed();
 
+	// Populate bottom heater field.
+	bottomHeaterField = new Field(resX, 1, resZ);
+	
+	LOG(INFO) << "Generating random theta field, random seed set to 0";
+	srand(0); // Make sure every simulation is the same.
+
+	real entroVariation = cfg->entroVariation();
+	for (int i = 0; i < bottomHeaterField->totalSize; ++i) {
+		real entropy = -1 / targetTheta;
+		real entropyVar = entroVariation * 2 * real(rand() / double(RAND_MAX) - 0.5f);
+		entropy += entropyVar;
+		bottomHeaterField->content[i] = - 1 / entropy;
+	}
+
+	LOG(INFO) << "Random bottom fields, min = " << bottomHeaterField->getMin() <<
+		", max = " << bottomHeaterField->getMax();
+
 	// environmentRho = cfg->vdwVaporRho();
-	// environmentTheta = cfg->startTheta();
+	environmentTheta = cfg->startTheta();
 
 	if (initRhoField) rhoField = new Field(initRhoField);
 	else rhoField = new Field(resX, resY, resZ, true);
@@ -921,9 +1002,9 @@ void ThermalSolver::stepSimple(real dt)
 	Field* rhoPrimeField = new Field(rhoField, false);
 	// For rhoStarField.
 	Field* rhsRhoStarField = new Field(rhoField, false);
-	rhsRhoStarField->initTopSlice();
+	// rhsRhoStarField->initTopSlice();
 	Field* rhsRhoStarStarField = new Field(rhoField, false);
-	rhsRhoStarStarField->initTopSlice();
+	// rhsRhoStarStarField->initTopSlice();
 
 	int loopCount = 0;
 	real lastRhoDelta = std::numeric_limits<real>::max();
@@ -998,6 +1079,7 @@ ThermalSolver::~ThermalSolver()
 	delete vyField;
 	delete vzField;
 	delete thetaField;
+	delete bottomHeaterField;
 	delete[] heatersX;
 	delete[] heatersY;
 	delete[] heatersZ;

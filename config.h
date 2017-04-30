@@ -40,6 +40,7 @@ public:
 
 	float startTheta() { return cfg_.lookup("boilingProcess.startTheta"); }
 	float targetTheta() { return cfg_.lookup("boilingProcess.targetTheta"); }
+	float entroVariation() { return cfg_.lookup("boilingProcess.entropyVariation"); }
 	float heatSpeed() { return cfg_.lookup("boilingProcess.heatSpeed"); }
 	int heaterIntervalX() { return cfg_.lookup("boilingProcess.heaterPositions.intervalX"); }
 	int heaterIntervalY() { return cfg_.lookup("boilingProcess.heaterPositions.intervalY"); }

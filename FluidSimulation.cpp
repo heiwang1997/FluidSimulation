@@ -42,11 +42,11 @@ int main(int argc, char** argv)
 		//initRhoField = getInitRhoField(config->resX(), config->resY(), config->resZ(),
 		//	config->h(), config->vdwLiquidRho(), config->vdwVaporRho());
 
-		initRhoField = getSingleBubbleRhoField(config->resX(), config->resY(), config->resZ(),
-			config->h(), config->vdwLiquidRho(), config->vdwVaporRho());
+		//initRhoField = getSingleBubbleRhoField(config->resX(), config->resY(), config->resZ(),
+			//config->h(), config->vdwLiquidRho(), config->vdwVaporRho());
 
-		//initRhoField = getSemiLiquidField(config->resX(), config->resY(), config->resZ(),
-		//	config->vdwLiquidRho(), config->vdwVaporRho(), 0.85f);
+		initRhoField = getSemiLiquidField(config->resX(), config->resY(), config->resZ(),
+			config->vdwLiquidRho(), config->vdwVaporRho(), 0.85f);
 
 		initThetaField = getInitThetaField(config->resX(), config->resY(), config->resZ(),
 			config->startTheta());

@@ -100,7 +100,7 @@ void ThermalSolver::computeVelocityStar(real dt,
 					int centerMinus = rhsRhoField->getIndex(i - (d == 0), j - (d == 1), k - (d == 2));
 					vStarContent[d][vIndex] += (dt / h) * (rhsPlus - rhsRhoField->content[centerMinus]);
 					// Add gravity at y axis.
-					if (d == 1 && (j != resY)) {
+					if (d == 1) {
 						vStarContent[d][vIndex] -= envGravity * dt;
 					}
 				}

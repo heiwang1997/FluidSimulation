@@ -55,16 +55,15 @@ int main(int argc, char** argv)
 			config->totalFrame(), config->gridFPS(), config->gridDt());
 	}
 	else if (argc == 3) {
-		LOG(FATAL) << "Not supported.";
-		return -1;
-
 		config = new Config(argv[1]);
 		initRhoField = new Field(config->resX(), config->resY(), config->resZ());
 		initVxField = new Field(config->resX() + 1, config->resY(), config->resZ());
 		initVyField = new Field(config->resX(), config->resY() + 1, config->resZ());
 		initVzField = new Field(config->resX(), config->resY(), config->resZ() + 1);
+		initThetaField = new Field(config->resX(), config->resY(), config->resZ());
 		timeStep = new TimeStepController(1.0f, 1, 1.0f);
-		io::loadSolverFromFile(argv[2], initRhoField, initVxField, initVyField, initVzField, timeStep);
+		io::loadSolverFromFile(argv[2], initRhoField, initVxField, initVyField, 
+			initVzField, initThetaField, timeStep);
 	}
 	else {
 		std::cout << "Usage: FluidSimulation.exe <config file> <model file>" << std::endl;

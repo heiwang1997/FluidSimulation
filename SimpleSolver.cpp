@@ -497,7 +497,7 @@ void SimpleSolver::run(TimeStepController* timeStep)
 				_mkdir(baseFolder.c_str());
 				std::string snapshotFilename = baseFolder + std::to_string(stepCount);
 				LOG(INFO) << "Dumping solver state to " << snapshotFilename;
-				io::dumpSolverToFile(snapshotFilename, rhoField, vxField, vyField, vzField, timeStep);
+				io::dumpSolverToFile(snapshotFilename, rhoField, vxField, vyField, vzField, rhoField, timeStep);
 			}
 		}
 	}
